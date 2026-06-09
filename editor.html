@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>LC County — Map Editor</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0e1117;--panel:#161b26;--panel2:#1c2235;--border:#252d42;
+  --accent:#f0c040;--accent2:#4dd8e0;--text:#dde1ee;--muted:#5a6480;
+  --danger:#f04b4b;--cell:96;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+header{background:var(--panel);border-bottom:1px solid var(--border);height:44px;display:flex;align-items:center;padding:0 14px;gap:12px;flex-shrink:0;z-index:200;}
+.logo{font-family:'Space Mono',monospace;font-size:12px;color:var(--accent);letter-spacing:.1em;}
+.badge{background:var(--danger);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;letter-spacing:.1em;}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:14px;}
+.zoom-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;}
+input[type=range]{-webkit-appearance:none;width:120px;height:4px;background:var(--border);border-radius:2px;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer;}
+.layout{display:flex;flex:1;overflow:hidden;}
+/* SIDEBAR */
+.sidebar{width:272px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;}
+.tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.tab{flex:1;padding:9px 0;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;text-align:center;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.pane{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.pane.active{display:flex;}
+.scroll{flex:1;overflow-y:auto;padding:10px;}
+.scroll::-webkit-scrollbar{width:3px;}
+.scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.sec{margin-bottom:14px;}
+.sl{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+label{font-size:11px;color:var(--muted);display:block;margin:6px 0 3px;}
+input[type=text],input[type=number],select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:7px 9px;border-radius:4px;outline:none;transition:border-color .15s;}
+input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--accent);}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 12px;border-radius:4px;border:none;cursor:pointer;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.04em;transition:all .15s;}
+.btn-full{width:100%;}
+.btn-y{background:var(--accent);color:#111;}
+.btn-y:hover{background:#f5d060;}
+.btn-c{background:var(--accent2);color:#111;}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn-o:hover{border-color:var(--accent);color:var(--accent);}
+.btn-r{background:transparent;border:1px solid var(--danger);color:var(--danger);}
+.btn-r:hover{background:var(--danger);color:#fff;}
+.btn:disabled{opacity:.3;cursor:not-allowed;}
+.btn-row{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap;}
+.draw-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.dchip{padding:7px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:11px;font-family:'IBM Plex Sans',sans-serif;color:var(--muted);transition:all .15s;display:flex;align-items:center;gap:6px;}
+.dchip:hover{color:var(--text);border-color:var(--muted);}
+.dchip.active{border-color:var(--accent);color:var(--accent);background:rgba(240,192,64,.07);}
+.cdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.eli{display:flex;align-items:center;gap:7px;padding:7px 8px;border-radius:4px;border:1px solid transparent;cursor:pointer;transition:all .15s;margin-bottom:2px;}
+.eli:hover{background:rgba(255,255,255,.03);border-color:var(--border);}
+.eli.sel{border-color:var(--accent);background:rgba(240,192,64,.05);}
+.eldot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.eln{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+.elm{font-size:10px;color:var(--muted);}
+.xbtn{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 5px;border-radius:3px;font-size:12px;}
+.xbtn:hover{color:var(--danger);background:rgba(240,75,75,.1);}
+.togrow{display:flex;align-items:center;justify-content:space-between;padding:4px 0;}
+.togrow span{font-size:12px;}
+.tog{width:30px;height:17px;background:var(--border);border-radius:9px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;}
+.tog.on{background:var(--accent);}
+.tog::after{content:'';width:13px;height:13px;background:#fff;border-radius:50%;position:absolute;top:2px;left:2px;transition:transform .2s;}
+.tog.on::after{transform:translateX(13px);}
+.empty{padding:16px;text-align:center;color:var(--muted);font-size:12px;}
+.empty .ico{font-size:28px;margin-bottom:6px;}
+.sb{padding:5px 12px;background:var(--bg);border-top:1px solid var(--border);font-size:10px;font-family:'Space Mono',monospace;color:var(--muted);display:flex;justify-content:space-between;flex-shrink:0;}
+.sdot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#22c55e;margin-right:5px;}
+.toast{position:fixed;bottom:18px;right:18px;background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);color:var(--text);padding:9px 14px;border-radius:5px;font-size:12px;z-index:9999;opacity:0;transition:opacity .25s;max-width:280px;}
+.toast.show{opacity:1;}
+.toast.err{border-left-color:var(--danger);}
+/* ICON PALETTE */
+.icon-palette{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px;}
+.icoBtn{background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 4px;cursor:grab;text-align:center;font-size:18px;transition:all .15s;user-select:none;}
+.icoBtn:hover{border-color:var(--accent);transform:scale(1.05);}
+.icoBtn span{display:block;font-size:9px;color:var(--muted);margin-top:3px;font-family:'Space Mono',monospace;}
+/* SHIELD PREVIEW */
+.shield-preview{display:flex;gap:10px;align-items:center;margin:8px 0;}
+.shield-opt{cursor:pointer;padding:4px;border-radius:4px;border:2px solid transparent;transition:all .15s;}
+.shield-opt.active{border-color:var(--accent);}
+/* CANVAS WRAP */
+.canvas-wrap{flex:1;overflow:auto;background:#0a0d14;position:relative;}
+.canvas-wrap::-webkit-scrollbar{width:8px;height:8px;}
+.canvas-wrap::-webkit-scrollbar-track{background:var(--bg);}
+.canvas-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+#mapCanvas{display:block;cursor:crosshair;}
+.hint{position:fixed;top:56px;left:50%;transform:translateX(-50%);background:rgba(240,192,64,.95);color:#111;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:6px 18px;border-radius:20px;z-index:500;pointer-events:none;display:none;box-shadow:0 4px 18px rgba(0,0,0,.4);}
+.hint.on{display:block;}
+.ztag{position:fixed;pointer-events:none;z-index:400;background:var(--panel);border:1px solid var(--border);font-family:'Space Mono',monospace;font-size:10px;color:var(--accent2);padding:3px 8px;border-radius:4px;display:none;}
+/* addr/stop items */
+.ait{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:4px;cursor:pointer;margin-bottom:2px;border:1px solid transparent;}
+.ait:hover{background:rgba(255,255,255,.03);border-color:var(--border);}
+.anum{font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);min-width:26px;}
+.ast{font-size:11px;flex:1;}
+.zbadge{font-family:'Space Mono',monospace;font-size:9px;background:var(--panel2);border:1px solid var(--border);padding:1px 5px;border-radius:3px;color:var(--muted);}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">LC COUNTY GPS</div>
+  <div class="badge">EDITOR</div>
+  <div class="hdr-r">
+    <div class="zoom-row">
+      ZOOM
+      <input type="range" id="zoomSlider" min="0.02" max="2" step="0.01" value="0.1" oninput="setZoom(this.value)">
+      <span id="zoomLabel">1×</span>
+    </div>
+    <span id="apiStat" style="font-size:11px;font-family:'Space Mono',monospace;color:var(--muted)">connecting…</span>
+  </div>
+</header>
+
+<div class="layout">
+<div class="sidebar">
+  <div class="tabs">
+    <div class="tab active" data-t="draw">Draw</div>
+    <div class="tab" data-t="icons">Icons</div>
+    <div class="tab" data-t="layers">Layers</div>
+    <div class="tab" data-t="addr">Addr</div>
+    <div class="tab" data-t="transit">Transit</div>
+  </div>
+
+  <!-- DRAW -->
+  <div class="pane active" id="pane-draw">
+    <div class="scroll">
+      <div class="sec">
+        <div class="sl">Draw Type</div>
+        <div class="draw-grid">
+          <button class="dchip active" data-m="road"    onclick="setDM('road')">   <span class="cdot" style="background:#b0b8c8"></span>Road</button>
+          <button class="dchip"        data-m="highway" onclick="setDM('highway')"><span class="cdot" style="background:#f59e0b"></span>Highway</button>
+          <button class="dchip"        data-m="rail"    onclick="setDM('rail')">   <span class="cdot" style="background:#3b82f6"></span>Rail</button>
+          <button class="dchip"        data-m="water"   onclick="setDM('water')">  <span class="cdot" style="background:#1d4ed8"></span>Water</button>
+          <button class="dchip"        data-m="park"    onclick="setDM('park')">   <span class="cdot" style="background:#15803d"></span>Park</button>
+          <button class="dchip"        data-m="building"onclick="setDM('building')"><span class="cdot" style="background:#7c3aed"></span>Building</button>
+          <button class="dchip"        data-m="ramp"    onclick="setDM('ramp')">    <span class="cdot" style="background:#e0c870"></span>Ramp</button>
+          <button class="dchip"        data-m="ocean"   onclick="setDM('ocean')">   <span class="cdot" style="background:#1a4a8a"></span>Ocean</button>
+          <button class="dchip"        data-m="footpath"onclick="setDM('footpath')"><span class="cdot" style="background:#92400e"></span>Footpath</button>
+        </div>
+      </div>
+
+      <!-- Road options -->
+      <div class="sec" id="opt-road">
+        <div class="sl">Road Type</div>
+        <select id="roadSub">
+          <option value="motorway">Motorway (divided highway)</option>
+          <option value="primary">Primary Road (4 lane)</option>
+          <option value="secondary" selected>Secondary Road (2 lane)</option>
+          <option value="residential">Residential Street</option>
+          <option value="footpath">Footpath / Trail</option>
+          <option value="cycleway">Cycleway</option>
+        </select>
+        <label>Road Name</label>
+        <input type="text" id="roadName" placeholder="e.g. Main Street">
+      </div>
+
+      <!-- Highway options -->
+      <div class="sec" id="opt-highway" style="display:none">
+        <div class="sl">Highway Shield Style</div>
+        <div class="shield-preview">
+          <div class="shield-opt active" id="shA" onclick="setShield('interstate')" title="Interstate style">
+            <svg width="38" height="38" viewBox="0 0 38 38">
+              <rect x="2" y="6" width="34" height="26" rx="6" fill="#1a3a8a" stroke="#fff" stroke-width="2"/>
+              <text x="19" y="24" text-anchor="middle" fill="#fff" font-size="13" font-weight="700" font-family="Arial">1</text>
+            </svg>
+          </div>
+          <div class="shield-opt" id="shB" onclick="setShield('state')" title="State route style">
+            <svg width="38" height="38" viewBox="0 0 38 38">
+              <path d="M19 2 L36 10 L36 30 Q36 36 19 36 Q2 36 2 30 L2 10 Z" fill="#fff" stroke="#333" stroke-width="2"/>
+              <path d="M19 5 L33 12 L33 29 Q33 34 19 34 Q5 34 5 29 L5 12 Z" fill="#fff" stroke="#333" stroke-width="1.5"/>
+              <text x="19" y="25" text-anchor="middle" fill="#111" font-size="13" font-weight="700" font-family="Arial">1</text>
+            </svg>
+          </div>
+        </div>
+        <label>Highway Number</label>
+        <input type="text" id="hwNum" placeholder="e.g. 101, 5, 280" maxlength="4">
+        <label>Highway Name (optional)</label>
+        <input type="text" id="hwName" placeholder="e.g. Pacific Freeway">
+      </div>
+
+      <!-- Ramp options -->
+      <div class="sec" id="opt-ramp" style="display:none">
+        <div class="sl">Ramp Type</div>
+        <select id="rampSub">
+          <option value="onramp">On-Ramp</option>
+          <option value="offramp">Off-Ramp</option>
+          <option value="interchange">Interchange / Connector</option>
+          <option value="loopRamp">Loop Ramp</option>
+        </select>
+        <label>Ramp Name / Label</label>
+        <input type="text" id="rampName" placeholder="e.g. Exit 12, I-5 N On-Ramp">
+      </div>
+      <!-- Rail options -->
+      <div class="sec" id="opt-rail" style="display:none">
+        <div class="sl">Rail Type</div>
+        <select id="railSub">
+          <option value="subway">Subway / Metro</option>
+          <option value="tram">Light Rail / Tram</option>
+          <option value="commuter">Commuter Rail</option>
+          <option value="monorail">Monorail</option>
+        </select>
+        <label>Line Name</label>
+        <input type="text" id="railName" placeholder="e.g. Line A, Blue Line">
+        <label>Line Color</label>
+        <input type="color" id="railColor" value="#3b82f6" style="width:44px;height:34px;padding:2px;border-radius:4px;border:1px solid var(--border);background:var(--bg);">
+      </div>
+
+      <!-- Water/Park/Building options -->
+      <div class="sec" id="opt-area" style="display:none">
+        <label>Name</label>
+        <input type="text" id="areaName" placeholder="e.g. Lakeview Park, River Bend">
+      </div>
+
+      <div class="sec">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-y btn-full" onclick="startDraw()" id="btnStart">▷ Start Drawing</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-o" onclick="undoPt()" id="btnUndo" disabled style="flex:1">↩ Undo</button>
+          <button class="btn btn-o" onclick="finishDraw()" id="btnFinish" disabled style="flex:1">✓ Finish</button>
+          <button class="btn btn-r" onclick="cancelDraw()" id="btnCancel" disabled>✕</button>
+        </div>
+        <p style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">Tip: Double-click to finish drawing. Roads auto-render with lanes at zoom &gt;2.</p>
+      </div>
+
+      <div class="sec">
+        <div class="sl">Saved Elements <span id="elCount" style="color:var(--muted)"></span></div>
+        <div id="elList"><div class="empty"><div class="ico">🗺️</div>Nothing drawn yet</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ICONS -->
+  <div class="pane" id="pane-icons">
+    <div class="scroll">
+      <div class="sec">
+        <div class="sl">Drag onto map</div>
+        <div class="icon-palette" id="iconPalette">
+          <div class="icoBtn" draggable="true" data-itype="park"       data-ilabel="Park">🌳<span>Park</span></div>
+          <div class="icoBtn" draggable="true" data-itype="forest"     data-ilabel="Forest">🌲<span>Forest</span></div>
+          <div class="icoBtn" draggable="true" data-itype="beach"      data-ilabel="Beach">🏖️<span>Beach</span></div>
+          <div class="icoBtn" draggable="true" data-itype="school"     data-ilabel="School">🏫<span>School</span></div>
+          <div class="icoBtn" draggable="true" data-itype="hospital"   data-ilabel="Hospital">🏥<span>Hospital</span></div>
+          <div class="icoBtn" draggable="true" data-itype="police"     data-ilabel="Police">👮<span>Police</span></div>
+          <div class="icoBtn" draggable="true" data-itype="fire"       data-ilabel="Fire Sta.">🚒<span>Fire Sta.</span></div>
+          <div class="icoBtn" draggable="true" data-itype="cityhall"   data-ilabel="City Hall">🏛️<span>City Hall</span></div>
+          <div class="icoBtn" draggable="true" data-itype="airport"    data-ilabel="Airport">✈️<span>Airport</span></div>
+          <div class="icoBtn" draggable="true" data-itype="shopping"   data-ilabel="Shopping">🛍️<span>Shopping</span></div>
+          <div class="icoBtn" draggable="true" data-itype="restaurant" data-ilabel="Restaurant">🍽️<span>Dining</span></div>
+          <div class="icoBtn" draggable="true" data-itype="hotel"      data-ilabel="Hotel">🏨<span>Hotel</span></div>
+          <div class="icoBtn" draggable="true" data-itype="church"     data-ilabel="Church">⛪<span>Church</span></div>
+          <div class="icoBtn" draggable="true" data-itype="stadium"    data-ilabel="Stadium">🏟️<span>Stadium</span></div>
+          <div class="icoBtn" draggable="true" data-itype="library"    data-ilabel="Library">📚<span>Library</span></div>
+          <div class="icoBtn" draggable="true" data-itype="landmark"   data-ilabel="Landmark">📍<span>Landmark</span></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sl">Placed Icons <span id="iconCount" style="color:var(--muted)"></span></div>
+        <div id="iconList"><div class="empty"><div class="ico">📌</div>Drag icons onto the map</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LAYERS -->
+  <div class="pane" id="pane-layers">
+    <div class="scroll">
+      <div class="sl">Visibility</div>
+      <div id="layerToggles"></div>
+    </div>
+  </div>
+
+  <!-- ADDR -->
+  <div class="pane" id="pane-addr">
+    <div class="scroll">
+      <div class="sec">
+        <div class="sl">Place Address Pin</div>
+        <button class="btn btn-c btn-full" id="btnPin" onclick="startPin()">📍 Click Map to Place</button>
+        <div id="pinForm" style="display:none;margin-top:10px">
+          <div style="font-size:10px;color:var(--accent2);font-family:'Space Mono',monospace;margin-bottom:6px" id="pinZL"></div>
+          <div class="r2">
+            <div><label>Number *</label><input type="text" id="aNum" placeholder="123"></div>
+            <div><label>Unit</label><input type="text" id="aUnit" placeholder="Apt 2"></div>
+          </div>
+          <label>Street *</label><input type="text" id="aStreet" placeholder="Main Street">
+          <div class="r2">
+            <div><label>District</label><input type="text" id="aDist"></div>
+            <div><label>Zip</label><input type="text" id="aZip" readonly style="color:var(--accent);font-family:'Space Mono',monospace;background:var(--panel2)"></div>
+          </div>
+          <label>Type</label>
+          <select id="aType">
+            <option value="residential">Residential</option>
+            <option value="commercial">Commercial</option>
+            <option value="government">Government</option>
+            <option value="landmark">Landmark</option>
+          </select>
+          <label>Display Label</label><input type="text" id="aLabel" placeholder="City Hall…">
+          <div class="btn-row">
+            <button class="btn btn-y" onclick="saveAddr()" style="flex:1">Save</button>
+            <button class="btn btn-o" onclick="cancelPin()">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div class="sl" style="padding:0 0 6px">Addresses <span id="addrCount" style="color:var(--muted)"></span></div>
+      <div id="addrList"><div class="empty"><div class="ico">📬</div>No addresses</div></div>
+    </div>
+  </div>
+
+  <!-- TRANSIT -->
+  <div class="pane" id="pane-transit">
+    <div class="scroll">
+
+      <!-- OPERATORS -->
+      <div class="sec">
+        <div class="sl">Operators</div>
+        <label>Operator Name *</label><input type="text" id="opName" placeholder="LC Metro">
+        <div class="r2">
+          <div><label>Short Name</label><input type="text" id="opShort" placeholder="LCM"></div>
+          <div><label>Type</label>
+            <select id="opType">
+              <option value="subway">Subway</option>
+              <option value="bus">Bus</option>
+              <option value="tram">Tram</option>
+              <option value="rail">Rail</option>
+            </select>
+          </div>
+        </div>
+        <div class="r2">
+          <div><label>Brand Color</label><input type="color" id="opColor" value="#1a3a8a" style="width:44px;height:34px;padding:2px;border-radius:4px;border:1px solid var(--border);"></div>
+          <div><label>Logo Emoji</label><input type="text" id="opEmoji" placeholder="🚇" maxlength="2"></div>
+        </div>
+        <label>Website (optional)</label><input type="text" id="opWeb" placeholder="https://…">
+        <button class="btn btn-y btn-full" style="margin-top:8px" onclick="saveOperator()">Save Operator</button>
+        <div class="sl" style="padding:8px 0 4px">Operators <span id="opCount" style="color:var(--muted)"></span></div>
+        <div id="opList"><div class="empty"><div class="ico">🏢</div>No operators</div></div>
+      </div>
+
+      <!-- TRANSIT LINES -->
+      <div class="sec">
+        <div class="sl">Transit Lines</div>
+        <label>Line Name *</label><input type="text" id="lnName" placeholder="Line A — Blue">
+        <div class="r2">
+          <div><label>Short Name</label><input type="text" id="lnShort" placeholder="A"></div>
+          <div><label>Type</label>
+            <select id="lnType">
+              <option value="subway">Subway</option>
+              <option value="bus">Bus</option>
+              <option value="tram">Tram</option>
+              <option value="rail">Rail</option>
+            </select>
+          </div>
+        </div>
+        <div class="r2">
+          <div><label>Operator</label><select id="lnOperator"><option value="">— select —</option></select></div>
+          <div><label>Line Color</label><input type="color" id="lnColor" value="#1a56db" style="width:44px;height:34px;padding:2px;border-radius:4px;border:1px solid var(--border);"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);margin-top:8px">
+          <input type="checkbox" id="lnShowPath" checked style="width:auto;accent-color:var(--accent)">
+          Show path on customer map (uncheck for bus)
+        </label>
+        <button class="btn btn-y btn-full" style="margin-top:8px" onclick="saveLine()">Save Line</button>
+        <div class="sl" style="padding:8px 0 4px">Lines <span id="lineCount" style="color:var(--muted)"></span></div>
+        <div id="lineList"><div class="empty"><div class="ico">🚇</div>No lines</div></div>
+      </div>
+
+      <!-- SCHEDULE WINDOWS -->
+      <div class="sec">
+        <div class="sl">Schedule Windows</div>
+        <label>Line</label><select id="swLine"><option value="">— select line —</option></select>
+        <label>Window Label</label><input type="text" id="swLabel" placeholder="Morning Rush, Late Night…">
+        <div class="r2">
+          <div><label>Start Time</label><input type="time" id="swStart" value="06:00"></div>
+          <div><label>End Time</label><input type="time" id="swEnd" value="09:00"></div>
+        </div>
+        <label>Every ___ minutes</label>
+        <input type="number" id="swFreq" placeholder="5" min="1" max="120">
+        <label>Days</label>
+        <select id="swDays">
+          <option value="both">Both weekday & weekend</option>
+          <option value="weekday">Weekday only</option>
+          <option value="weekend">Weekend only</option>
+        </select>
+        <button class="btn btn-y btn-full" style="margin-top:8px" onclick="saveScheduleWindow()">Add Schedule Window</button>
+        <div class="sl" style="padding:8px 0 4px">Windows for selected line</div>
+        <div id="swList"><div class="empty"><div class="ico">🕐</div>Select a line above</div></div>
+      </div>
+
+      <!-- STATIONS -->
+      <div class="sec">
+        <div class="sl">Train / Metro Station</div>
+        <button class="btn btn-c btn-full" id="btnStation" onclick="startStationPin()">🚉 Click Map to Place</button>
+        <div id="stationForm" style="display:none;margin-top:10px">
+          <label>Station Name *</label><input type="text" id="stName" placeholder="Central Station">
+          <label>Station Code</label><input type="text" id="stCode" placeholder="CTR">
+          <label>Operator</label><select id="stOperator"><option value="">— none —</option></select>
+          <label>Lines (comma sep. line IDs)</label><input type="text" id="stLines" placeholder="1, 2">
+          <div class="btn-row">
+            <button class="btn btn-y" onclick="saveStation()" style="flex:1">Save</button>
+            <button class="btn btn-o" onclick="cancelStationPin()">Cancel</button>
+          </div>
+        </div>
+        <div class="sl" style="padding:8px 0 4px">Stations <span id="stationCount" style="color:var(--muted)"></span></div>
+        <div id="stationList"><div class="empty"><div class="ico">🚉</div>No stations</div></div>
+      </div>
+
+      <!-- BUS STOPS -->
+      <div class="sec">
+        <div class="sl">Bus Stop</div>
+        <button class="btn btn-c btn-full" id="btnBusStop" onclick="startBusPin()">🚌 Click Map to Place</button>
+        <div id="busForm" style="display:none;margin-top:10px">
+          <label>Stop Name *</label><input type="text" id="bsName" placeholder="Oak & Main">
+          <label>Stop Code</label><input type="text" id="bsCode" placeholder="BS-01">
+          <label>Lines (comma sep.)</label><input type="text" id="bsLines" placeholder="Route 12, 34">
+          <div class="btn-row">
+            <button class="btn btn-y" onclick="saveBusStop()" style="flex:1">Save</button>
+            <button class="btn btn-o" onclick="cancelBusPin()">Cancel</button>
+          </div>
+        </div>
+        <div class="sl" style="padding:8px 0 4px">Bus Stops <span id="busCount" style="color:var(--muted)"></span></div>
+        <div id="busList"><div class="empty"><div class="ico">🚌</div>No stops</div></div>
+      </div>
+
+      <!-- BUS ROUTES -->
+      <div class="sec">
+        <div class="sl">Bus Route (path hidden on customer map)</div>
+        <label>Route Name</label><input type="text" id="brName" placeholder="Route 12 — Eastside">
+        <div class="r2">
+          <div><label>Number</label><input type="text" id="brNum" placeholder="12"></div>
+          <div><label>Color</label><input type="color" id="brColor" value="#f97316" style="width:44px;height:34px;padding:2px;border-radius:4px;border:1px solid var(--border);"></div>
+        </div>
+        <label>Operator</label><select id="brOperator"><option value="">— none —</option></select>
+        <label>Stop IDs in order (comma sep.)</label>
+        <input type="text" id="brStops" placeholder="1, 2, 3, 4">
+        <button class="btn btn-y btn-full" style="margin-top:8px" onclick="saveBusRoute()">Save Bus Route</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="sb">
+    <span><span class="sdot" id="sdot"></span><span id="statusTxt">Ready</span></span>
+    <span id="xyCoords">—</span>
+  </div>
+</div>
+
+<!-- CANVAS -->
+<div class="canvas-wrap" id="canvasWrap">
+  <canvas id="mapCanvas"></canvas>
+</div>
+</div>
+
+<div class="hint" id="drawHint">DRAWING — click points · double-click to finish</div>
+<div class="ztag" id="ztag"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = (location.hostname==='localhost'||location.hostname==='127.0.0.1')
+  ? 'http://localhost:8787'
+  : 'https://maps-api.felixfeger46.workers.dev';
+
+const CELL=800, COLS=10, ROWS=10, W=8000, H=8000;
+const canvas=document.getElementById('mapCanvas');
+const ctx=canvas.getContext('2d');
+canvas.width=W; canvas.height=H;
+// Editor uses CSS transform for zoom, not redraw
+
+let zoom=1, drawMode='road', isDrawing=false, drawPts=[];
+let elements=[], addresses=[], stations=[], busStops=[], icons=[];
+let selectedEl=null;
+let pinMode=false, pendingPin=null;
+let stationPinMode=false, pendingStation=null;
+let busPinMode=false, pendingBus=null;
+let shieldStyle='interstate';
+let layerVis={road:true,highway:true,rail:true,water:true,park:true,building:true,address:true,transit:true,icons:true};
+let mx=0, my=0;
+let draggingIcon=null;
+
+// Zip helpers
+function xyToZip(x,y){
+  const col=Math.min(Math.floor(x/CELL),COLS-1);
+  const row=Math.min(Math.floor(y/CELL),ROWS-1);
+  return String(10001+row*COLS+col);
+}
+
+function setZoom(v){
+  zoom=parseFloat(v);
+  document.getElementById('zoomLabel').textContent=zoom.toFixed(1)+'×';
+  canvas.style.width=(W*zoom)+'px';
+  canvas.style.height=(H*zoom)+'px';
+  // Center scroll after zoom change
+  const wrap=document.getElementById('canvasWrap');
+  const midX=W*zoom/2, midY=H*zoom/2;
+  // keep viewport centered
+  render();
+}
+
+function fitToScreen(){
+  const wrap=document.getElementById('canvasWrap');
+  const ww=wrap.clientWidth||window.innerWidth-272;
+  const wh=wrap.clientHeight||window.innerHeight-44;
+  const fz=Math.min(ww/W,wh/H)*0.92;
+  const slider=document.getElementById('zoomSlider');
+  slider.value=fz;
+  setZoom(fz);
+  // Center scroll
+  setTimeout(()=>{
+    const wrap2=document.getElementById('canvasWrap');
+    wrap2.scrollLeft=(W*fz-wrap2.clientWidth)/2;
+    wrap2.scrollTop=(H*fz-wrap2.clientHeight)/2;
+  },50);
+}
+
+// ── RENDER ──────────────────────────────────────────────────────────────────
+const ROAD_CFG={
+  motorway:  {lanes:4,w:20,fill:'#e8c88a',border:'#c8a84a',center:'#ffd700',hasMedian:true},
+  primary:   {lanes:4,w:16,fill:'#f5f0e0',border:'#d4c890',center:'#ffd700',hasMedian:false},
+  secondary: {lanes:2,w:11,fill:'#ffffff',border:'#b0b0b0',center:'#ffcc00',hasMedian:false},
+  residential:{lanes:2,w:8,fill:'#ffffff',border:'#cccccc',center:'#ffcc00',hasMedian:false},
+  footpath:  {lanes:1,w:4,fill:'#d4b896',border:'#a08060',center:null,hasMedian:false},
+  cycleway:  {lanes:1,w:4,fill:'#a8d8a8',border:'#50a050',center:null,hasMedian:false},
+};
+const RAIL_COLORS={subway:'#e53e3e',tram:'#38a169',commuter:'#3182ce',monorail:'#805ad5'};
+const ICON_EMOJI={park:'🌳',forest:'🌲',beach:'🏖️',school:'🏫',hospital:'🏥',police:'👮',fire:'🚒',cityhall:'🏛️',airport:'✈️',shopping:'🛍️',restaurant:'🍽️',hotel:'🏨',church:'⛪',stadium:'🏟️',library:'📚',landmark:'📍'};
+const ICON_BGCOLORS={park:'#d4edda',forest:'#c3e6cb',beach:'#fff3cd',school:'#d1ecf1',hospital:'#f8d7da',police:'#cce5ff',fire:'#f8d7da',cityhall:'#e2d9f3',airport:'#d1ecf1',shopping:'#ffeeba',restaurant:'#f8d7da',hotel:'#d6d8db',church:'#e2d9f3',stadium:'#d4edda',library:'#d1ecf1',landmark:'#fff3cd'};
+
+function render(){
+  ctx.save();
+  ctx.clearRect(0,0,W,H);
+
+  // Base ground color
+  ctx.fillStyle='#e8e0d8';
+  ctx.fillRect(0,0,W,H);
+
+  // Cell backgrounds (very subtle alternation)
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    ctx.fillStyle=(r+c)%2===0?'#e8e0d880':'#ede5dc80';
+    ctx.fillRect(c*CELL,r*CELL,CELL,CELL);
+  }
+
+  // Grid lines
+  ctx.strokeStyle='#d4c8b8';
+  ctx.lineWidth=0.5;
+  for(let i=0;i<=COLS;i++){ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,H);ctx.stroke();}
+  for(let j=0;j<=ROWS;j++){ctx.beginPath();ctx.moveTo(0,j*CELL);ctx.lineTo(W,j*CELL);ctx.stroke();}
+
+  // Zip labels ALWAYS visible in editor
+  ctx.font=`bold ${Math.max(10,Math.round(CELL*zoom*0.09))}px "Space Mono",monospace`;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const zip=String(10001+r*COLS+c);
+    ctx.fillStyle='rgba(0,0,0,0.08)'; ctx.fillText(zip,c*CELL+5+1,r*CELL+5+1);
+    ctx.fillStyle='#a09080'; ctx.fillText(zip,c*CELL+5,r*CELL+5);
+  }
+
+  // Draw order: water/park/area → buildings → roads → rail → icons/stops/addresses → overlay
+  const order=['water','park','building','area','road','highway','rail'];
+  for(const t of order){
+    if(!layerVis[t]&&t!=='highway') continue;
+    if(t==='highway'&&!layerVis['highway']) continue;
+    for(const el of elements){
+      if(el.type!==t) continue;
+      renderElement(el,el.id===selectedEl);
+    }
+  }
+
+  // Highway shields on top of roads
+  if(layerVis.highway){
+    for(const el of elements){
+      if(el.type!=='highway') continue;
+      drawHighwayShield(el);
+    }
+  }
+
+  // Rail line labels (colored line name badges)
+  if(layerVis.rail){
+    for(const el of elements){
+      if(el.type!=='rail') continue;
+      drawRailLabel(el);
+    }
+  }
+
+  // Icons (placed POIs)
+  if(layerVis.icons){
+    for(const ic of icons) drawIconMarker(ic,false);
+  }
+
+  // Transit: stations
+  if(layerVis.transit){
+    for(const s of stations) drawStationMarker(s);
+    for(const b of busStops) drawBusStopMarker(b);
+  }
+
+  // Addresses
+  if(layerVis.address){
+    const tc={residential:'#e8a000',commercial:'#0077cc',government:'#cc3300',landmark:'#6600cc'};
+    for(const a of addresses){
+      ctx.beginPath(); ctx.arc(a.x,a.y,4.5,0,Math.PI*2);
+      ctx.fillStyle=tc[a.address_type]||'#e8a000'; ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+    }
+  }
+
+  // Pending pins
+  if(pendingPin){ drawPinDrop(pendingPin.x,pendingPin.y,'#f0c040'); }
+  if(pendingStation){ drawPinDrop(pendingStation.x,pendingStation.y,'#4dd8e0'); }
+  if(pendingBus){ drawPinDrop(pendingBus.x,pendingBus.y,'#f97316'); }
+
+  // Active drawing
+  if(isDrawing&&drawPts.length>0){
+    const isArea=['water','park','building'].includes(drawMode);
+    const color=drawMode==='highway'?'#f59e0b':drawMode==='rail'?(document.getElementById('railColor')?.value||'#3b82f6'):'#3b82f6';
+
+    ctx.save();
+    ctx.setLineDash([7,4]);
+    ctx.strokeStyle=color; ctx.lineWidth=isArea?2:4; ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(drawPts[0].x,drawPts[0].y);
+    for(let i=1;i<drawPts.length;i++) ctx.lineTo(drawPts[i].x,drawPts[i].y);
+    ctx.lineTo(mx,my); ctx.stroke();
+    if(isArea&&drawPts.length>=2){ctx.closePath();ctx.fillStyle=color+'30';ctx.fill();}
+    ctx.setLineDash([]);
+    drawPts.forEach((p,i)=>{
+      ctx.beginPath(); ctx.arc(p.x,p.y,i===0?6:4,0,Math.PI*2);
+      ctx.fillStyle=i===0?color:'#fff'; ctx.fill();
+      ctx.strokeStyle=color; ctx.lineWidth=2; ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  // Zip hover highlight
+  if(!isDrawing&&!pinMode&&!stationPinMode&&!busPinMode){
+    const col=Math.floor(mx/CELL), row=Math.floor(my/CELL);
+    if(col>=0&&col<COLS&&row>=0&&row<ROWS){
+      ctx.strokeStyle='rgba(0,100,200,0.25)'; ctx.lineWidth=2;
+      ctx.strokeRect(col*CELL+1,row*CELL+1,CELL-2,CELL-2);
+    }
+  }
+  ctx.textAlign='left';
+  ctx.restore();
+}
+
+function renderElement(el,selected){
+  const pts=JSON.parse(el.points);
+  if(pts.length<2) return;
+  ctx.save();
+  if(selected){ctx.shadowColor='#f0c040';ctx.shadowBlur=10;}
+
+  const isArea=['water','park','building','area'].includes(el.type);
+
+  if(el.type==='water') drawWater(pts,el,selected);
+  else if(el.type==='park') drawParkArea(pts,el,selected);
+  else if(el.type==='building') drawBuilding(pts,el,selected);
+  else if(el.type==='road') drawRoad(pts,el,selected);
+  else if(el.type==='highway') drawHighway(pts,el,selected);
+  else if(el.type==='rail') drawRailLine(pts,el,selected);
+  else{
+    // generic area
+    ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+    if(isArea) ctx.closePath();
+    ctx.strokeStyle=el.color||'#888'; ctx.lineWidth=1.5; ctx.stroke();
+    if(isArea){ctx.fillStyle=(el.color||'#888')+'30';ctx.fill();}
+  }
+  ctx.restore();
+}
+
+// ── WATER ─────────────────────────────────────────────────────────────────────
+function drawWater(pts,el,selected){
+  ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.closePath();
+  // gradient fill
+  const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  const grad=ctx.createLinearGradient(0,minY,0,maxY);
+  grad.addColorStop(0,'#6baed6');
+  grad.addColorStop(1,'#2171b5');
+  ctx.fillStyle=grad; ctx.fill();
+  ctx.strokeStyle='#4292c6'; ctx.lineWidth=2; ctx.stroke();
+
+  // wave lines inside
+  ctx.save(); ctx.clip();
+  ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1.5;
+  const avgY=(minY+maxY)/2;
+  for(let wy=minY+8;wy<maxY;wy+=12){
+    ctx.beginPath();
+    for(let wx=Math.min(...xs);wx<Math.max(...xs);wx+=6){
+      const wy2=wy+Math.sin(wx*0.15)*3;
+      wx===Math.min(...xs)?ctx.moveTo(wx,wy2):ctx.lineTo(wx,wy2);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // "water" label
+  const cx=pts.reduce((s,p)=>s+p.x,0)/pts.length;
+  const cy=pts.reduce((s,p)=>s+p.y,0)/pts.length;
+  if(el.name){
+    ctx.font='italic 11px "IBM Plex Sans",sans-serif';
+    ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.textAlign='center';
+    ctx.fillText(el.name,cx,cy);
+  }
+}
+
+// ── PARK ─────────────────────────────────────────────────────────────────────
+function drawParkArea(pts,el,selected){
+  ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.closePath();
+  const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
+  const grad=ctx.createLinearGradient(0,Math.min(...ys),0,Math.max(...ys));
+  grad.addColorStop(0,'#74c476'); grad.addColorStop(1,'#238b45');
+  ctx.fillStyle=grad; ctx.fill();
+  ctx.strokeStyle='#006d2c'; ctx.lineWidth=1.5; ctx.stroke();
+  const cx=pts.reduce((s,p)=>s+p.x,0)/pts.length;
+  const cy=pts.reduce((s,p)=>s+p.y,0)/pts.length;
+  if(el.name){
+    ctx.font='11px "IBM Plex Sans",sans-serif';
+    ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.textAlign='center';
+    ctx.fillText('🌳 '+el.name,cx,cy);
+  }
+}
+
+// ── BUILDING ────────────────────────────────────────────────────────────────
+function drawBuilding(pts,el,selected){
+  ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle='#c7b8ea'; ctx.fill();
+  ctx.strokeStyle='#7c5cbf'; ctx.lineWidth=1.5; ctx.stroke();
+}
+
+// ── ROAD ─────────────────────────────────────────────────────────────────────
+function drawRoad(pts,el,selected){
+  const sub=el.subtype||'secondary';
+  if(sub==='footpath'||sub==='cycleway'){
+    const c=sub==='footpath'?'#c8956c':'#68b868';
+    ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+    ctx.strokeStyle=c; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
+    return;
+  }
+
+  const cfg=ROAD_CFG[sub]||ROAD_CFG.secondary;
+  const hw=cfg.w/2;
+
+  // For each segment draw the road cross-section
+  for(let i=0;i<pts.length-1;i++){
+    const ax=pts[i].x, ay=pts[i].y, bx=pts[i+1].x, by=pts[i+1].y;
+    const len=Math.sqrt((bx-ax)**2+(by-ay)**2);
+    if(len<1) continue;
+    const nx=(by-ay)/len, ny=-(bx-ax)/len; // normal
+
+    // Road body
+    ctx.beginPath();
+    ctx.moveTo(ax+nx*hw,ay+ny*hw); ctx.lineTo(bx+nx*hw,by+ny*hw);
+    ctx.lineTo(bx-nx*hw,by-ny*hw); ctx.lineTo(ax-nx*hw,ay-ny*hw);
+    ctx.closePath();
+    ctx.fillStyle=cfg.fill; ctx.fill();
+    ctx.strokeStyle=cfg.border; ctx.lineWidth=1; ctx.stroke();
+
+    // At high zoom, draw lane details
+    if(zoom>=2){
+      // Sidewalks (narrow strips on edges)
+      const swW=2;
+      ['L','R'].forEach(side=>{
+        const s=side==='L'?1:-1;
+        ctx.beginPath();
+        ctx.moveTo(ax+nx*(hw-swW)*s,ay+ny*(hw-swW)*s);
+        ctx.lineTo(bx+nx*(hw-swW)*s,by+ny*(hw-swW)*s);
+        ctx.lineTo(bx+nx*hw*s,by+ny*hw*s);
+        ctx.lineTo(ax+nx*hw*s,ay+ny*hw*s);
+        ctx.closePath(); ctx.fillStyle='#e8d8c0'; ctx.fill();
+      });
+
+      // Lane markings
+      if(cfg.lanes>=2&&cfg.center){
+        if(cfg.hasMedian){
+          // Double yellow for median
+          ctx.strokeStyle='#ffd700'; ctx.lineWidth=1.5;
+          [-1,1].forEach(s=>{
+            ctx.beginPath(); ctx.moveTo(ax+nx*s*1.5,ay+ny*s*1.5); ctx.lineTo(bx+nx*s*1.5,by+ny*s*1.5); ctx.stroke();
+          });
+        } else {
+          // Dashed center line
+          ctx.strokeStyle='#ffcc00'; ctx.lineWidth=1.2; ctx.setLineDash([8,6]);
+          ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); ctx.setLineDash([]);
+        }
+        // Lane dividers (white dashes)
+        if(cfg.lanes>=4){
+          const laneW=cfg.w/cfg.lanes;
+          for(let l=1;l<cfg.lanes/2;l++){
+            const off=l*laneW;
+            ['L','R'].forEach(side=>{
+              const s=side==='L'?1:-1;
+              ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=0.8; ctx.setLineDash([6,8]);
+              ctx.beginPath(); ctx.moveTo(ax+nx*off*s,ay+ny*off*s); ctx.lineTo(bx+nx*off*s,by+ny*off*s); ctx.stroke();
+            });
+          }
+          ctx.setLineDash([]);
+        }
+      }
+    }
+  }
+
+  // Road name label along line (at mid point)
+  if(el.name&&zoom>=1.5){
+    const mid=Math.floor(pts.length/2);
+    const p=pts[mid]||pts[0];
+    ctx.font='bold 9px "IBM Plex Sans",sans-serif';
+    ctx.fillStyle='#333'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    // white bg
+    const tw=ctx.measureText(el.name).width;
+    ctx.fillStyle='rgba(255,255,255,0.8)';
+    ctx.fillRect(p.x-tw/2-2,p.y-6,tw+4,12);
+    ctx.fillStyle='#444'; ctx.fillText(el.name,p.x,p.y);
+  }
+}
+
+// ── HIGHWAY ──────────────────────────────────────────────────────────────────
+function drawHighway(pts,el,selected){
+  // Draw as wide motorway
+  const hw=14;
+  for(let i=0;i<pts.length-1;i++){
+    const ax=pts[i].x,ay=pts[i].y,bx=pts[i+1].x,by=pts[i+1].y;
+    const len=Math.sqrt((bx-ax)**2+(by-ay)**2); if(len<1) continue;
+    const nx=(by-ay)/len, ny=-(bx-ax)/len;
+    ctx.beginPath();
+    ctx.moveTo(ax+nx*hw,ay+ny*hw); ctx.lineTo(bx+nx*hw,by+ny*hw);
+    ctx.lineTo(bx-nx*hw,by-ny*hw); ctx.lineTo(ax-nx*hw,ay-ny*hw);
+    ctx.closePath(); ctx.fillStyle='#f5e6b8'; ctx.fill();
+    ctx.strokeStyle='#d4a830'; ctx.lineWidth=1.5; ctx.stroke();
+    if(zoom>=2){
+      // Double yellow center (divided highway)
+      ctx.strokeStyle='#ffd700'; ctx.lineWidth=1.5;
+      [-2,2].forEach(s=>{
+        ctx.beginPath(); ctx.moveTo(ax+nx*s,ay+ny*s); ctx.lineTo(bx+nx*s,by+ny*s); ctx.stroke();
+      });
+      // White lane dividers
+      [6,-6].forEach(s=>{
+        ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=1; ctx.setLineDash([10,8]);
+        ctx.beginPath(); ctx.moveTo(ax+nx*s,ay+ny*s); ctx.lineTo(bx+nx*s,by+ny*s); ctx.stroke();
+        ctx.setLineDash([]);
+      });
+    }
+  }
+}
+
+function drawHighwayShield(el){
+  if(!el.hw_number) return;
+  const pts=JSON.parse(el.points);
+  if(pts.length<2) return;
+  const mid=Math.floor(pts.length/2);
+  const p=pts[mid]||pts[0];
+  const style=el.shield_style||'interstate';
+  const num=el.hw_number||'1';
+  drawShield(ctx,p.x,p.y,style,num);
+}
+
+function drawShield(ctx,x,y,style,num){
+  ctx.save();
+  if(style==='interstate'){
+    // Blue rounded rectangle
+    const w=28,h=22;
+    ctx.beginPath();
+    roundRect(ctx,x-w/2,y-h/2,w,h,5);
+    ctx.fillStyle='#1a3a8a'; ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+    // Red top stripe
+    ctx.beginPath(); roundRectTop(ctx,x-w/2,y-h/2,w,8,5);
+    ctx.fillStyle='#cc2222'; ctx.fill();
+    ctx.font='bold 9px Arial,sans-serif'; ctx.fillStyle='#fff';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(num,x,y+3);
+  } else {
+    // State pentagon shape (upside-down house)
+    const sw=26,sh=28;
+    ctx.beginPath();
+    ctx.moveTo(x,y-sh/2);         // top point
+    ctx.lineTo(x+sw/2,y-sh/4);    // top-right
+    ctx.lineTo(x+sw/2,y+sh/2-6);  // bottom-right
+    ctx.quadraticCurveTo(x+sw/2,y+sh/2, x+sw/2-6,y+sh/2); // br corner
+    ctx.lineTo(x-sw/2+6,y+sh/2);
+    ctx.quadraticCurveTo(x-sw/2,y+sh/2, x-sw/2,y+sh/2-6);
+    ctx.lineTo(x-sw/2,y-sh/4);
+    ctx.closePath();
+    ctx.fillStyle='#fff'; ctx.fill();
+    ctx.strokeStyle='#333'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.font='bold 10px Arial,sans-serif'; ctx.fillStyle='#111';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(num,x,y+2);
+  }
+  ctx.restore();
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+function roundRectTop(ctx,x,y,w,h,r){
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+
+// ── RAIL ─────────────────────────────────────────────────────────────────────
+function drawRailLine(pts,el,selected){
+  const color=el.color||RAIL_COLORS[el.subtype]||'#e53e3e';
+  const w=el.subtype==='commuter'?6:4;
+  // White underline (border)
+  ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=w+3; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+  // Colored line
+  ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.strokeStyle=color; ctx.lineWidth=w; ctx.stroke();
+}
+
+function drawRailLabel(el){
+  if(!el.name) return;
+  const pts=JSON.parse(el.points); if(pts.length<2) return;
+  const mid=Math.floor(pts.length/2);
+  const p=pts[mid]||pts[0];
+  const color=el.color||RAIL_COLORS[el.subtype]||'#e53e3e';
+  ctx.font='bold 9px "IBM Plex Sans",sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const tw=ctx.measureText(el.name).width;
+  ctx.fillStyle=color; ctx.beginPath(); roundRect(ctx,p.x-tw/2-4,p.y-8,tw+8,16,4); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.fillText(el.name,p.x,p.y);
+}
+
+// ── STATION ───────────────────────────────────────────────────────────────────
+function drawStationMarker(s){
+  ctx.save();
+  // White circle with colored ring
+  ctx.beginPath(); ctx.arc(s.x,s.y,10,0,Math.PI*2);
+  ctx.fillStyle='#fff'; ctx.fill();
+  ctx.strokeStyle='#1a3a8a'; ctx.lineWidth=3; ctx.stroke();
+  // Inner dot
+  ctx.beginPath(); ctx.arc(s.x,s.y,4,0,Math.PI*2);
+  ctx.fillStyle='#1a3a8a'; ctx.fill();
+  // Name label
+  ctx.font='bold 10px "IBM Plex Sans",sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  const tw=ctx.measureText(s.name).width;
+  ctx.fillStyle='rgba(255,255,255,0.92)';
+  ctx.fillRect(s.x-tw/2-3,s.y+12,tw+6,14);
+  ctx.strokeStyle='#1a3a8a'; ctx.lineWidth=1;
+  ctx.strokeRect(s.x-tw/2-3,s.y+12,tw+6,14);
+  ctx.fillStyle='#1a1a2e'; ctx.fillText(s.name,s.x,s.y+13);
+  ctx.restore();
+}
+
+// ── BUS STOP ──────────────────────────────────────────────────────────────────
+function drawBusStopMarker(b){
+  ctx.save();
+  ctx.beginPath(); ctx.arc(b.x,b.y,7,0,Math.PI*2);
+  ctx.fillStyle='#f97316'; ctx.fill();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+  ctx.font='bold 7px Arial'; ctx.fillStyle='#fff';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('B',b.x,b.y);
+  if(b.name&&zoom>=1.5){
+    ctx.font='9px "IBM Plex Sans",sans-serif';
+    ctx.fillStyle='#333'; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(b.name,b.x,b.y+9);
+  }
+  ctx.restore();
+}
+
+// ── ICON MARKER ───────────────────────────────────────────────────────────────
+function drawIconMarker(ic,hover){
+  ctx.save();
+  const bg=ICON_BGCOLORS[ic.itype]||'#fff';
+  // Pin shape
+  ctx.beginPath();
+  ctx.arc(ic.x,ic.y-18,13,0,Math.PI*2);
+  ctx.fillStyle=bg; ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.lineWidth=1; ctx.stroke();
+  // Tail
+  ctx.beginPath(); ctx.moveTo(ic.x-5,ic.y-9); ctx.lineTo(ic.x+5,ic.y-9); ctx.lineTo(ic.x,ic.y); ctx.closePath();
+  ctx.fillStyle=bg; ctx.fill();
+  // Emoji
+  ctx.font='14px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(ICON_EMOJI[ic.itype]||'📍',ic.x,ic.y-18);
+  // Label popup (always in editor)
+  if(ic.label){
+    ctx.font='bold 10px "IBM Plex Sans",sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    const tw=ctx.measureText(ic.label).width;
+    ctx.fillStyle='rgba(255,255,255,0.95)';
+    roundRect(ctx,ic.x-tw/2-4,ic.y-ic.y+ic.y+2-35,tw+8,14,3);
+    ctx.fill(); ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=0.5; ctx.stroke();
+    ctx.fillStyle='#222'; ctx.fillText(ic.label,ic.x,ic.y-33);
+  }
+  ctx.restore();
+}
+
+function drawPinDrop(x,y,color){
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2);
+  ctx.fillStyle=color; ctx.fill();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+  ctx.restore();
+}
+
+// ── CANVAS EVENTS ─────────────────────────────────────────────────────────────
+function toCanvas(e){
+  const r=canvas.getBoundingClientRect();
+  return{x:Math.round((e.clientX-r.left)/zoom),y:Math.round((e.clientY-r.top)/zoom)};
+}
+// zip helper update for new CELL size
+function xyToZip(x,y){
+  const col=Math.min(Math.floor(x/CELL),COLS-1);
+  const row=Math.min(Math.floor(y/CELL),ROWS-1);
+  return String(10001+row*COLS+col);
+}
+
+canvas.addEventListener('mousemove',e=>{
+  const{x,y}=toCanvas(e); mx=x; my=y;
+  const zip=xyToZip(x,y);
+  const tag=document.getElementById('ztag');
+  tag.style.display='block';
+  tag.style.left=(e.clientX+12)+'px';
+  tag.style.top=(e.clientY-24)+'px';
+  tag.textContent=zip;
+  document.getElementById('xyCoords').textContent=`x:${x} y:${y} zip:${zip}`;
+  render();
+});
+
+canvas.addEventListener('mouseleave',()=>{
+  document.getElementById('ztag').style.display='none';
+  document.getElementById('xyCoords').textContent='—';
+});
+
+canvas.addEventListener('click',e=>{
+  const{x,y}=toCanvas(e);
+  if(pinMode){handlePinDrop(x,y);return;}
+  if(stationPinMode){handleStationDrop(x,y);return;}
+  if(busPinMode){handleBusDrop(x,y);return;}
+  if(!isDrawing) return;
+  drawPts.push({x,y}); render();
+});
+
+canvas.addEventListener('dblclick',e=>{
+  if(isDrawing&&drawPts.length>=2) finishDraw();
+});
+
+// ── DRAG & DROP icons ─────────────────────────────────────────────────────────
+document.getElementById('iconPalette').addEventListener('dragstart',e=>{
+  const btn=e.target.closest('.icoBtn');
+  if(!btn) return;
+  draggingIcon={itype:btn.dataset.itype,ilabel:btn.dataset.ilabel};
+  e.dataTransfer.effectAllowed='copy';
+});
+
+const cWrap=document.getElementById('canvasWrap');
+cWrap.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';});
+cWrap.addEventListener('drop',async e=>{
+  e.preventDefault();
+  if(!draggingIcon) return;
+  const r=canvas.getBoundingClientRect();
+  const x=Math.round((e.clientX-r.left)/zoom);
+  const y=Math.round((e.clientY-r.top)/zoom);
+  const zip=xyToZip(x,y);
+  // prompt for custom label
+  const lbl=prompt(`Label for ${draggingIcon.ilabel}?`,draggingIcon.ilabel)||draggingIcon.ilabel;
+  const ic={itype:draggingIcon.itype,label:lbl,x,y,zip};
+  try{
+    const r2=await apiFetch('/api/icons','POST',ic);
+    if(r2.id){ic.id=r2.id;icons.push(ic);renderIconList();render();toast(`Placed: ${lbl}`);}
+  }catch{icons.push({...ic,id:Date.now()});renderIconList();render();}
+  draggingIcon=null;
+});
+
+// ── DRAW LOGIC ────────────────────────────────────────────────────────────────
+function setDM(m){
+  drawMode=m;
+  document.querySelectorAll('.dchip').forEach(b=>b.classList.toggle('active',b.dataset.m===m));
+  document.getElementById('opt-road').style.display=m==='road'?'block':'none';
+  document.getElementById('opt-highway').style.display=m==='highway'?'block':'none';
+  document.getElementById('opt-ramp').style.display=m==='ramp'?'block':'none';
+  document.getElementById('opt-rail').style.display=m==='rail'?'block':'none';
+  document.getElementById('opt-area').style.display=['water','ocean','park','building','footpath'].includes(m)?'block':'none';
+}
+
+function setShield(s){
+  shieldStyle=s;
+  document.getElementById('shA').classList.toggle('active',s==='interstate');
+  document.getElementById('shB').classList.toggle('active',s==='state');
+}
+
+function startDraw(){
+  isDrawing=true; drawPts=[];
+  document.getElementById('btnStart').disabled=true;
+  document.getElementById('btnFinish').disabled=false;
+  document.getElementById('btnCancel').disabled=false;
+  document.getElementById('btnUndo').disabled=false;
+  document.getElementById('drawHint').classList.add('on');
+  setStatus('Drawing…');
+}
+function undoPt(){if(drawPts.length>0){drawPts.pop();render();}}
+
+async function finishDraw(){
+  if(!isDrawing||drawPts.length<2){toast('Need ≥2 points','err');return;}
+  let name,subtype,color,hw_number,shield_style;
+  let speed_limit=null, has_sidewalk=false;
+  if(drawMode==='road'){
+    subtype=document.getElementById('roadSub').value;
+    name=document.getElementById('roadName').value.trim();
+    speed_limit=parseInt(document.getElementById('speedLimit').value)||null;
+    has_sidewalk=document.getElementById('hasSidewalk').checked;
+  }
+  else if(drawMode==='highway'){hw_number=document.getElementById('hwNum').value.trim();name=document.getElementById('hwName').value.trim();shield_style=shieldStyle;speed_limit=parseInt(document.getElementById('speedLimit').value)||65;}
+  else if(drawMode==='ramp'){subtype=document.getElementById('rampSub').value;name=document.getElementById('rampName').value.trim();}
+  else if(drawMode==='rail'){subtype=document.getElementById('railSub').value;name=document.getElementById('railName').value.trim();color=document.getElementById('railColor').value;}
+  else{name=document.getElementById('areaName').value.trim();}
+
+  const payload={type:drawMode,subtype:subtype||null,name:name||`${drawMode} ${Date.now()}`,color:color||null,width:4,points:drawPts,hw_number:hw_number||null,shield_style:shield_style||null,speed_limit,has_sidewalk};
+  try{
+    const r=await apiFetch('/api/elements','POST',payload);
+    if(r.id){toast(`Saved: ${payload.name}`);await loadElements();}
+  }catch{toast('Save failed','err');}
+  cancelDraw();
+}
+
+function cancelDraw(){
+  isDrawing=false; drawPts=[];
+  document.getElementById('btnStart').disabled=false;
+  document.getElementById('btnFinish').disabled=true;
+  document.getElementById('btnCancel').disabled=true;
+  document.getElementById('btnUndo').disabled=true;
+  document.getElementById('drawHint').classList.remove('on');
+  setStatus('Ready'); render();
+}
+
+// ── DATA LOADERS ──────────────────────────────────────────────────────────────
+async function loadElements(){
+  try{elements=await apiFetch('/api/elements');renderElList();document.getElementById('elCount').textContent=`(${elements.length})`;}catch{}
+  render();
+}
+function renderElList(){
+  const d=document.getElementById('elList');
+  if(!elements.length){d.innerHTML='<div class="empty"><div class="ico">🗺️</div>Nothing drawn</div>';return;}
+  const typeColors={road:'#94a3b8',highway:'#f59e0b',rail:'#3b82f6',water:'#2171b5',park:'#238b45',building:'#7c3aed',area:'#555'};
+  d.innerHTML=elements.map(e=>`<div class="eli ${selectedEl===e.id?'sel':''}" onclick="selEl(${e.id})">
+    <div class="eldot" style="background:${e.color||typeColors[e.type]||'#888'}"></div>
+    <div style="flex:1;min-width:0"><div class="eln">${e.name||'Unnamed'}</div><div class="elm">${e.type}${e.subtype?' · '+e.subtype:e.hw_number?' #'+e.hw_number:''}</div></div>
+    <button class="xbtn" onclick="event.stopPropagation();delEl(${e.id})">✕</button>
+  </div>`).join('');
+}
+
+function selEl(id){selectedEl=id;renderElList();render();}
+async function delEl(id){if(!confirm('Delete?'))return;await apiFetch(`/api/elements/${id}`,'DELETE');toast('Deleted');await loadElements();}
+
+async function loadAddresses(){
+  try{addresses=await apiFetch('/api/addresses');document.getElementById('addrCount').textContent=`(${addresses.length})`;
+  const list=document.getElementById('addrList');
+  if(!addresses.length){list.innerHTML='<div class="empty"><div class="ico">📬</div>No addresses</div>';render();return;}
+  list.innerHTML=addresses.map(a=>`<div class="ait">
+    <div class="anum">${a.number}</div>
+    <div class="ast">${a.street}${a.unit?', '+a.unit:''}<br><span style="font-size:10px;color:var(--muted)">${a.address_type}</span></div>
+    <div class="zbadge">${a.zip}</div>
+    <button class="xbtn" onclick="delAddr(${a.id})">✕</button>
+  </div>`).join('');
+  }catch{}
+  render();
+}
+async function delAddr(id){await apiFetch(`/api/addresses/${id}`,'DELETE');toast('Deleted');await loadAddresses();}
+
+async function loadStations(){
+  try{stations=await apiFetch('/api/stations');
+  document.getElementById('stationCount').textContent=`(${stations.length})`;
+  const list=document.getElementById('stationList');
+  if(!stations.length){list.innerHTML='<div class="empty"><div class="ico">🚉</div>No stations</div>';render();return;}
+  list.innerHTML=stations.map(s=>`<div class="ait">
+    <div class="anum">🚉</div>
+    <div class="ast">${s.name}${s.code?' ('+s.code+')':''}<br><span style="font-size:10px;color:var(--muted)">${s.lines||''}</span></div>
+    <div class="zbadge">${s.zip||''}</div>
+    <button class="xbtn" onclick="delStation(${s.id})">✕</button>
+  </div>`).join('');
+  }catch{}
+  render();
+}
+
+async function loadBusStops(){
+  try{busStops=await apiFetch('/api/busstops');
+  document.getElementById('busCount').textContent=`(${busStops.length})`;
+  const list=document.getElementById('busList');
+  if(!busStops.length){list.innerHTML='<div class="empty"><div class="ico">🚌</div>No bus stops</div>';render();return;}
+  list.innerHTML=busStops.map(b=>`<div class="ait">
+    <div class="anum">🚌</div>
+    <div class="ast">${b.name}${b.code?' ('+b.code+')':''}<br><span style="font-size:10px;color:var(--muted)">${b.lines||''}</span></div>
+    <div class="zbadge">${b.zip||''}</div>
+    <button class="xbtn" onclick="delBusStop(${b.id})">✕</button>
+  </div>`).join('');
+  }catch{}
+  render();
+}
+
+function renderIconList(){
+  document.getElementById('iconCount').textContent=`(${icons.length})`;
+  const list=document.getElementById('iconList');
+  if(!icons.length){list.innerHTML='<div class="empty"><div class="ico">📌</div>No icons placed</div>';return;}
+  list.innerHTML=icons.map(ic=>`<div class="ait">
+    <div class="anum">${ICON_EMOJI[ic.itype]||'📍'}</div>
+    <div class="ast">${ic.label}<br><span style="font-size:10px;color:var(--muted)">zip ${ic.zip}</span></div>
+    <button class="xbtn" onclick="delIcon(${ic.id})">✕</button>
+  </div>`).join('');
+}
+
+async function loadIcons(){
+  try{const r=await apiFetch('/api/icons');icons=r;renderIconList();}catch{}
+  render();
+}
+
+async function delIcon(id){await apiFetch(`/api/icons/${id}`,'DELETE');icons=icons.filter(i=>i.id!==id);renderIconList();render();}
+async function delStation(id){await apiFetch(`/api/stations/${id}`,'DELETE');toast('Deleted');await loadStations();}
+async function delBusStop(id){await apiFetch(`/api/busstops/${id}`,'DELETE');toast('Deleted');await loadBusStops();}
+
+// ── PIN MODES ─────────────────────────────────────────────────────────────────
+function startPin(){
+  pinMode=true; canvas.style.cursor='cell';
+  document.getElementById('btnPin').textContent='📍 Click the map…'; setStatus('Click to place address pin');
+}
+function handlePinDrop(x,y){
+  const zip=xyToZip(x,y); pendingPin={x,y,zip};
+  document.getElementById('aZip').value=zip;
+  document.getElementById('pinZL').textContent=`📍 In zip ${zip}`;
+  document.getElementById('pinForm').style.display='block';
+  pinMode=false; canvas.style.cursor='crosshair';
+  document.getElementById('btnPin').textContent='📍 Click Map to Place';
+  render();
+}
+function cancelPin(){
+  pinMode=false; pendingPin=null; canvas.style.cursor='crosshair';
+  document.getElementById('pinForm').style.display='none';
+  document.getElementById('btnPin').textContent='📍 Click Map to Place';
+  ['aNum','aUnit','aStreet','aDist','aZip','aLabel'].forEach(id=>document.getElementById(id).value='');
+  setStatus('Ready'); render();
+}
+async function saveAddr(){
+  if(!pendingPin) return;
+  const number=document.getElementById('aNum').value.trim(), street=document.getElementById('aStreet').value.trim();
+  if(!number||!street){toast('Number & Street required','err');return;}
+  const payload={number,street,unit:document.getElementById('aUnit').value.trim()||null,district:document.getElementById('aDist').value.trim()||null,zip:pendingPin.zip,x:pendingPin.x,y:pendingPin.y,address_type:document.getElementById('aType').value,label:document.getElementById('aLabel').value.trim()||null};
+  try{const r=await apiFetch('/api/addresses','POST',payload);if(r.id){toast(`Saved: ${number} ${street}`);await loadAddresses();}}catch{toast('Save failed','err');}
+  cancelPin();
+}
+
+function startStationPin(){
+  stationPinMode=true; canvas.style.cursor='cell';
+  document.getElementById('btnStation').textContent='🚉 Click the map…';
+}
+function handleStationDrop(x,y){
+  pendingStation={x,y,zip:xyToZip(x,y)};
+  document.getElementById('stationForm').style.display='block';
+  stationPinMode=false; canvas.style.cursor='crosshair';
+  document.getElementById('btnStation').textContent='🚉 Click Map to Place Station';
+  render();
+}
+function cancelStationPin(){
+  stationPinMode=false; pendingStation=null; canvas.style.cursor='crosshair';
+  document.getElementById('stationForm').style.display='none';
+  document.getElementById('btnStation').textContent='🚉 Click Map to Place Station';
+  render();
+}
+async function saveStation(){
+  if(!pendingStation) return;
+  const name=document.getElementById('stName').value.trim();
+  if(!name){toast('Name required','err');return;}
+  const payload={name,code:document.getElementById('stCode').value.trim()||null,lines:document.getElementById('stLines').value.trim()||null,x:pendingStation.x,y:pendingStation.y,zip:pendingStation.zip};
+  try{const r=await apiFetch('/api/stations','POST',payload);if(r.id){toast(`Station saved: ${name}`);await loadStations();}}catch{toast('Save failed','err');}
+  cancelStationPin();
+  document.getElementById('stName').value=''; document.getElementById('stCode').value=''; document.getElementById('stLines').value='';
+}
+
+function startBusPin(){
+  busPinMode=true; canvas.style.cursor='cell';
+  document.getElementById('btnBusStop').textContent='🚌 Click the map…';
+}
+function handleBusDrop(x,y){
+  pendingBus={x,y,zip:xyToZip(x,y)};
+  document.getElementById('busForm').style.display='block';
+  busPinMode=false; canvas.style.cursor='crosshair';
+  document.getElementById('btnBusStop').textContent='🚌 Click Map to Place Stop';
+  render();
+}
+function cancelBusPin(){
+  busPinMode=false; pendingBus=null; canvas.style.cursor='crosshair';
+  document.getElementById('busForm').style.display='none';
+  document.getElementById('btnBusStop').textContent='🚌 Click Map to Place Stop';
+  render();
+}
+async function saveBusStop(){
+  if(!pendingBus) return;
+  const name=document.getElementById('bsName').value.trim();
+  if(!name){toast('Name required','err');return;}
+  const payload={name,code:document.getElementById('bsCode').value.trim()||null,lines:document.getElementById('bsLines').value.trim()||null,x:pendingBus.x,y:pendingBus.y,zip:pendingBus.zip};
+  try{const r=await apiFetch('/api/busstops','POST',payload);if(r.id){toast(`Stop saved: ${name}`);await loadBusStops();}}catch{toast('Save failed','err');}
+  cancelBusPin();
+  document.getElementById('bsName').value=''; document.getElementById('bsCode').value=''; document.getElementById('bsLines').value='';
+}
+async function saveBusRoute(){
+  const name=document.getElementById('brName').value.trim();
+  if(!name){toast('Route name required','err');return;}
+  const payload={name,number:document.getElementById('brNum').value.trim()||null,color:document.getElementById('brColor').value,stop_ids:document.getElementById('brStops').value.trim()};
+  try{const r=await apiFetch('/api/busroutes','POST',payload);if(r.id) toast(`Route saved: ${name}`);}catch{toast('Save failed','err');}
+}
+
+// ── LAYER TOGGLES ─────────────────────────────────────────────────────────────
+function renderLayerToggles(){
+  const types=['road','highway','rail','water','park','building','address','transit','icons'];
+  document.getElementById('layerToggles').innerHTML=types.map(t=>`
+    <div class="togrow">
+      <span>${t.charAt(0).toUpperCase()+t.slice(1)}</span>
+      <div class="tog on" id="tog-${t}" onclick="toggleLayer('${t}')"></div>
+    </div>`).join('');
+}
+function toggleLayer(t){
+  layerVis[t]=!layerVis[t];
+  document.getElementById(`tog-${t}`)?.classList.toggle('on',layerVis[t]);
+  render();
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById(`pane-${t.dataset.t}`).classList.add('active');
+}));
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+async function apiFetch(path,method='GET',body){
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const r=await fetch(API+path,opts); return r.json();
+}
+function setStatus(msg){document.getElementById('statusTxt').textContent=msg;}
+function toast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className=`toast show ${type}`;
+  setTimeout(()=>t.classList.remove('show'),2600);
+}
+async function checkAPI(){
+  try{await apiFetch('/api/health');document.getElementById('apiStat').textContent='● online';document.getElementById('apiStat').style.color='#22c55e';}
+  catch{document.getElementById('apiStat').textContent='● offline';document.getElementById('apiStat').style.color='#f04b4b';document.getElementById('sdot').style.background='#f04b4b';}
+}
+
+// ── OPERATORS ────────────────────────────────────────────────────────────────
+async function saveOperator(){
+  const name=document.getElementById('opName').value.trim();
+  if(!name){toast('Name required','err');return;}
+  const payload={name,short_name:document.getElementById('opShort').value.trim()||null,type:document.getElementById('opType').value,color:document.getElementById('opColor').value,logo_emoji:document.getElementById('opEmoji').value.trim()||'🚇',website:document.getElementById('opWeb').value.trim()||null};
+  try{const r=await apiFetch('/api/operators','POST',payload);if(r.id){toast('Operator saved');await loadOperators();}}catch{toast('Save failed','err');}
+  document.getElementById('opName').value='';document.getElementById('opShort').value='';document.getElementById('opWeb').value='';
+}
+async function loadOperators(){
+  try{
+    const ops=await apiFetch('/api/operators');
+    document.getElementById('opCount').textContent=`(${ops.length})`;
+    // populate selects
+    ['lnOperator','stOperator','brOperator'].forEach(id=>{
+      const sel=document.getElementById(id); if(!sel) return;
+      const cur=sel.value;
+      sel.innerHTML='<option value="">— none —</option>'+ops.map(o=>`<option value="${o.id}">${o.name} (${o.type})</option>`).join('');
+      sel.value=cur;
+    });
+    const list=document.getElementById('opList');
+    if(!ops.length){list.innerHTML='<div class="empty"><div class="ico">🏢</div>No operators</div>';return;}
+    list.innerHTML=ops.map(o=>`<div class="ait"><div class="anum" style="font-size:16px">${o.logo_emoji||'🚇'}</div><div class="ast">${o.name}<br><span style="font-size:10px;color:var(--muted)">${o.type} · ${o.short_name||''}</span></div><button class="xbtn" onclick="delOp(${o.id})">✕</button></div>`).join('');
+  }catch{}
+}
+async function delOp(id){await apiFetch(`/api/operators/${id}`,'DELETE');toast('Deleted');await loadOperators();}
+
+// ── TRANSIT LINES ─────────────────────────────────────────────────────────────
+async function saveLine(){
+  const name=document.getElementById('lnName').value.trim();
+  const opId=document.getElementById('lnOperator').value;
+  if(!name||!opId){toast('Name and operator required','err');return;}
+  const payload={name,short_name:document.getElementById('lnShort').value.trim()||null,type:document.getElementById('lnType').value,operator_id:parseInt(opId),color:document.getElementById('lnColor').value,show_path:document.getElementById('lnShowPath').checked?1:0};
+  try{const r=await apiFetch('/api/lines','POST',payload);if(r.id){toast('Line saved');await loadLines();}}catch{toast('Save failed','err');}
+  document.getElementById('lnName').value='';document.getElementById('lnShort').value='';
+}
+async function loadLines(){
+  try{
+    const lns=await apiFetch('/api/lines');
+    document.getElementById('lineCount').textContent=`(${lns.length})`;
+    // populate schedule line select
+    const swSel=document.getElementById('swLine');
+    const cur=swSel.value;
+    swSel.innerHTML='<option value="">— select line —</option>'+lns.map(l=>`<option value="${l.id}">${l.name} (${l.type})</option>`).join('');
+    swSel.value=cur;
+    const list=document.getElementById('lineList');
+    if(!lns.length){list.innerHTML='<div class="empty"><div class="ico">🚇</div>No lines</div>';return;}
+    list.innerHTML=lns.map(l=>`<div class="ait">
+      <div class="anum" style="background:${l.color||'#1a56db'};width:18px;height:18px;border-radius:50%;"></div>
+      <div class="ast">${l.name}<br><span style="font-size:10px;color:var(--muted)">${l.type} · ${l.operator_name||''}</span></div>
+      <button class="xbtn" onclick="delLine(${l.id})">✕</button>
+    </div>`).join('');
+  }catch{}
+}
+async function delLine(id){await apiFetch(`/api/lines/${id}`,'DELETE');toast('Deleted');await loadLines();}
+
+// ── SCHEDULE WINDOWS ──────────────────────────────────────────────────────────
+document.getElementById('swLine').addEventListener('change',()=>loadSwList());
+
+async function saveScheduleWindow(){
+  const lid=document.getElementById('swLine').value;
+  const label=document.getElementById('swLabel').value.trim();
+  const start=document.getElementById('swStart').value;
+  const end=document.getElementById('swEnd').value;
+  const freq=parseInt(document.getElementById('swFreq').value);
+  const days=document.getElementById('swDays').value;
+  if(!lid||!label||!start||!end||!freq){toast('All fields required','err');return;}
+  const payload={line_id:parseInt(lid),label,start_time:start,end_time:end,frequency_mins:freq,days};
+  try{const r=await apiFetch('/api/schedules','POST',payload);if(r.id){toast('Window saved');await loadSwList();}}catch{toast('Save failed','err');}
+  document.getElementById('swLabel').value='';document.getElementById('swFreq').value='';
+}
+async function loadSwList(){
+  const lid=document.getElementById('swLine').value;
+  const list=document.getElementById('swList');
+  if(!lid){list.innerHTML='<div class="empty"><div class="ico">🕐</div>Select a line above</div>';return;}
+  try{
+    const wins=await apiFetch(`/api/schedules?line_id=${lid}`);
+    if(!wins.length){list.innerHTML='<div class="empty"><div class="ico">🕐</div>No windows set</div>';return;}
+    const dayLabels={both:'All days',weekday:'Weekdays',weekend:'Weekends'};
+    list.innerHTML=wins.map(w=>`<div class="ait">
+      <div class="anum" style="font-size:13px">🕐</div>
+      <div class="ast">${w.label}<br><span style="font-size:10px;color:var(--muted)">${w.start_time}–${w.end_time} · every ${w.frequency_mins} min · ${dayLabels[w.days]||w.days}</span></div>
+      <button class="xbtn" onclick="delSW(${w.id})">✕</button>
+    </div>`).join('');
+  }catch{list.innerHTML='<div class="empty">Error loading</div>';}
+}
+async function delSW(id){await apiFetch(`/api/schedules/${id}`,'DELETE');toast('Deleted');await loadSwList();}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+setDM('road');
+renderLayerToggles();
+window.addEventListener('load',()=>setTimeout(fitToScreen,100));
+checkAPI();
+Promise.all([loadElements(),loadAddresses(),loadOperators(),loadLines(),loadStations(),loadBusStops(),loadIcons()]).then(()=>render());
+render();
+</script>
+</body>
+</html>
