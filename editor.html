@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>LC County — Map Editor</title>
+<title>City Metro Maps — Editor</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
 :root{
@@ -102,7 +102,7 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
 </head>
 <body>
 <header>
-  <div class="logo">LC COUNTY GPS</div>
+  <div class="logo">CITY METRO MAPS</div>
   <div class="badge">EDITOR</div>
   <div class="hdr-r">
     <div class="zoom-row">
@@ -223,7 +223,10 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
           <button class="btn btn-o" onclick="finishDraw()" id="btnFinish" disabled style="flex:1">✓ Finish</button>
           <button class="btn btn-r" onclick="cancelDraw()" id="btnCancel" disabled>✕</button>
         </div>
-        <p style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">Tip: Double-click to finish drawing. Roads auto-render with lanes at zoom &gt;2.</p>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn btn-r btn-full" id="btnEraser" onclick="toggleEraser()" style="border-color:var(--danger)">🗑 Eraser Mode</button>
+        </div>
+        <p style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">Tip: Double-click to finish. In eraser mode, click any element to delete it.</p>
       </div>
 
       <div class="sec">
@@ -255,6 +258,10 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
           <div class="icoBtn" draggable="true" data-itype="stadium"    data-ilabel="Stadium">🏟️<span>Stadium</span></div>
           <div class="icoBtn" draggable="true" data-itype="library"    data-ilabel="Library">📚<span>Library</span></div>
           <div class="icoBtn" draggable="true" data-itype="landmark"   data-ilabel="Landmark">📍<span>Landmark</span></div>
+          <div class="icoBtn" draggable="true" data-itype="trafficlight" data-ilabel="Traffic Light">🚦<span>Signal</span></div>
+          <div class="icoBtn" draggable="true" data-itype="stopsign"    data-ilabel="Stop Sign">🛑<span>Stop</span></div>
+          <div class="icoBtn" draggable="true" data-itype="crossing"    data-ilabel="Crosswalk">🚸<span>Crossing</span></div>
+          <div class="icoBtn" draggable="true" data-itype="parking"     data-ilabel="Parking">🅿️<span>Parking</span></div>
         </div>
       </div>
       <div class="sec">
@@ -458,7 +465,7 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
 <script>
 const API = (location.hostname==='localhost'||location.hostname==='127.0.0.1')
   ? 'http://localhost:8787'
-  : 'https://maps-api.felixfeger46.workers.dev';
+  : 'https://YOUR_WORKER.workers.dev';
 
 const CELL=800, COLS=10, ROWS=10, W=8000, H=8000;
 const canvas=document.getElementById('mapCanvas');
@@ -466,7 +473,7 @@ const ctx=canvas.getContext('2d');
 canvas.width=W; canvas.height=H;
 // Editor uses CSS transform for zoom, not redraw
 
-let zoom=1, drawMode='road', isDrawing=false, drawPts=[];
+let zoom=0.1, drawMode='road', isDrawing=false, drawPts=[], eraserMode=false;
 let elements=[], addresses=[], stations=[], busStops=[], icons=[];
 let selectedEl=null;
 let pinMode=false, pendingPin=null;
@@ -486,44 +493,41 @@ function xyToZip(x,y){
 
 function setZoom(v){
   zoom=parseFloat(v);
-  document.getElementById('zoomLabel').textContent=zoom.toFixed(1)+'×';
+  document.getElementById('zoomLabel').textContent=zoom.toFixed(2)+'×';
   canvas.style.width=(W*zoom)+'px';
   canvas.style.height=(H*zoom)+'px';
-  // Center scroll after zoom change
-  const wrap=document.getElementById('canvasWrap');
-  const midX=W*zoom/2, midY=H*zoom/2;
-  // keep viewport centered
   render();
 }
 
 function fitToScreen(){
   const wrap=document.getElementById('canvasWrap');
-  const ww=wrap.clientWidth||window.innerWidth-272;
-  const wh=wrap.clientHeight||window.innerHeight-44;
-  const fz=Math.min(ww/W,wh/H)*0.92;
+  const ww=wrap.clientWidth||(window.innerWidth-272);
+  const wh=wrap.clientHeight||(window.innerHeight-44);
+  const fz=Math.min(ww/W, wh/H)*0.90;
+  const clamped=Math.min(Math.max(fz,0.02),2);
   const slider=document.getElementById('zoomSlider');
-  slider.value=fz;
-  setZoom(fz);
-  // Center scroll
+  slider.value=clamped;
+  setZoom(clamped);
   setTimeout(()=>{
-    const wrap2=document.getElementById('canvasWrap');
-    wrap2.scrollLeft=(W*fz-wrap2.clientWidth)/2;
-    wrap2.scrollTop=(H*fz-wrap2.clientHeight)/2;
-  },50);
+    const w=document.getElementById('canvasWrap');
+    w.scrollLeft=Math.max(0,(W*clamped - w.clientWidth)/2);
+    w.scrollTop=Math.max(0,(H*clamped - w.clientHeight)/2);
+  },80);
 }
 
 // ── RENDER ──────────────────────────────────────────────────────────────────
+// Apple Maps warm palette road config
 const ROAD_CFG={
-  motorway:  {lanes:4,w:20,fill:'#e8c88a',border:'#c8a84a',center:'#ffd700',hasMedian:true},
-  primary:   {lanes:4,w:16,fill:'#f5f0e0',border:'#d4c890',center:'#ffd700',hasMedian:false},
-  secondary: {lanes:2,w:11,fill:'#ffffff',border:'#b0b0b0',center:'#ffcc00',hasMedian:false},
-  residential:{lanes:2,w:8,fill:'#ffffff',border:'#cccccc',center:'#ffcc00',hasMedian:false},
-  footpath:  {lanes:1,w:4,fill:'#d4b896',border:'#a08060',center:null,hasMedian:false},
-  cycleway:  {lanes:1,w:4,fill:'#a8d8a8',border:'#50a050',center:null,hasMedian:false},
+  motorway:   {lanes:4,w:20,fill:'#f5e8b8',border:'#d8c060',center:'rgba(200,170,40,0.5)',hasMedian:true},
+  primary:    {lanes:4,w:16,fill:'#faf6ee',border:'#d8cfa8',center:'rgba(200,170,40,0.4)',hasMedian:false},
+  secondary:  {lanes:2,w:11,fill:'#ffffff', border:'#ddd8ce',center:'rgba(200,170,40,0.35)',hasMedian:false},
+  residential:{lanes:2,w:8, fill:'#ffffff', border:'#e0dbd0',center:'rgba(200,170,40,0.3)',hasMedian:false},
+  footpath:   {lanes:1,w:4, fill:'#e8d4b8',border:'#c0a080',center:null,hasMedian:false},
+  cycleway:   {lanes:1,w:4, fill:'#b8e8a8',border:'#60b060',center:null,hasMedian:false},
 };
 const RAIL_COLORS={subway:'#e53e3e',tram:'#38a169',commuter:'#3182ce',monorail:'#805ad5'};
-const ICON_EMOJI={park:'🌳',forest:'🌲',beach:'🏖️',school:'🏫',hospital:'🏥',police:'👮',fire:'🚒',cityhall:'🏛️',airport:'✈️',shopping:'🛍️',restaurant:'🍽️',hotel:'🏨',church:'⛪',stadium:'🏟️',library:'📚',landmark:'📍'};
-const ICON_BGCOLORS={park:'#d4edda',forest:'#c3e6cb',beach:'#fff3cd',school:'#d1ecf1',hospital:'#f8d7da',police:'#cce5ff',fire:'#f8d7da',cityhall:'#e2d9f3',airport:'#d1ecf1',shopping:'#ffeeba',restaurant:'#f8d7da',hotel:'#d6d8db',church:'#e2d9f3',stadium:'#d4edda',library:'#d1ecf1',landmark:'#fff3cd'};
+const ICON_EMOJI={park:'🌳',forest:'🌲',beach:'🏖️',school:'🏫',hospital:'🏥',police:'👮',fire:'🚒',cityhall:'🏛️',airport:'✈️',shopping:'🛍️',restaurant:'🍽️',hotel:'🏨',church:'⛪',stadium:'🏟️',library:'📚',landmark:'📍',trafficlight:'🚦',stopsign:'🛑',crossing:'🚸',parking:'🅿️'};
+const ICON_BGCOLORS={park:'#d4edda',forest:'#c3e6cb',beach:'#fff3cd',school:'#d1ecf1',hospital:'#f8d7da',police:'#cce5ff',fire:'#f8d7da',cityhall:'#e2d9f3',airport:'#d1ecf1',shopping:'#ffeeba',restaurant:'#f8d7da',hotel:'#d6d8db',church:'#e2d9f3',stadium:'#d4edda',library:'#d1ecf1',landmark:'#fff3cd',trafficlight:'#222831',stopsign:'#fff0f0',crossing:'#fff8dc',parking:'#e8f0ff'};
 
 function render(){
   ctx.save();
@@ -674,10 +678,11 @@ function drawWater(pts,el,selected){
   const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
   const minY=Math.min(...ys), maxY=Math.max(...ys);
   const grad=ctx.createLinearGradient(0,minY,0,maxY);
-  grad.addColorStop(0,'#6baed6');
-  grad.addColorStop(1,'#2171b5');
+  // Apple Maps soft blue-gray water
+  grad.addColorStop(0,'#b8d8ee');
+  grad.addColorStop(1,'#8ec4e0');
   ctx.fillStyle=grad; ctx.fill();
-  ctx.strokeStyle='#4292c6'; ctx.lineWidth=2; ctx.stroke();
+  ctx.strokeStyle='#90c0dc'; ctx.lineWidth=1.5; ctx.stroke();
 
   // wave lines inside
   ctx.save(); ctx.clip();
@@ -710,14 +715,15 @@ function drawParkArea(pts,el,selected){
   ctx.closePath();
   const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
   const grad=ctx.createLinearGradient(0,Math.min(...ys),0,Math.max(...ys));
-  grad.addColorStop(0,'#74c476'); grad.addColorStop(1,'#238b45');
+  // Apple Maps soft muted green
+  grad.addColorStop(0,'#c8ddb8'); grad.addColorStop(1,'#a8c890');
   ctx.fillStyle=grad; ctx.fill();
-  ctx.strokeStyle='#006d2c'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.strokeStyle='#88b878'; ctx.lineWidth=1.2; ctx.stroke();
   const cx=pts.reduce((s,p)=>s+p.x,0)/pts.length;
   const cy=pts.reduce((s,p)=>s+p.y,0)/pts.length;
   if(el.name){
     ctx.font='11px "IBM Plex Sans",sans-serif';
-    ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.textAlign='center';
+    ctx.fillStyle='#3a6830'; ctx.textAlign='center';
     ctx.fillText('🌳 '+el.name,cx,cy);
   }
 }
@@ -727,8 +733,8 @@ function drawBuilding(pts,el,selected){
   ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
   for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
   ctx.closePath();
-  ctx.fillStyle='#c7b8ea'; ctx.fill();
-  ctx.strokeStyle='#7c5cbf'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.fillStyle='#ddd8d0'; ctx.fill();
+  ctx.strokeStyle='#c0b8b0'; ctx.lineWidth=1; ctx.stroke();
 }
 
 // ── ROAD ─────────────────────────────────────────────────────────────────────
@@ -975,29 +981,109 @@ function drawBusStopMarker(b){
 // ── ICON MARKER ───────────────────────────────────────────────────────────────
 function drawIconMarker(ic,hover){
   ctx.save();
+
+  if(ic.itype==='trafficlight'){
+    drawTrafficLight(ctx, ic.x, ic.y, zoom);
+    // label
+    if(zoom>0.05){
+      ctx.font=`bold ${Math.min(Math.round(10*zoom),10)}px "IBM Plex Sans",sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='#e8c547';
+      const lbl=ic.label||'Signal';
+      ctx.fillText(lbl, ic.x, ic.y + 16*zoom);
+    }
+    ctx.restore(); return;
+  }
+
+  if(ic.itype==='stopsign'){
+    drawStopSign(ctx, ic.x, ic.y, zoom);
+    ctx.restore(); return;
+  }
+
+  if(ic.itype==='crossing'){
+    drawCrossing(ctx, ic.x, ic.y, zoom);
+    ctx.restore(); return;
+  }
+
   const bg=ICON_BGCOLORS[ic.itype]||'#fff';
+  const r=Math.max(8, 13*zoom);
   // Pin shape
-  ctx.beginPath();
-  ctx.arc(ic.x,ic.y-18,13,0,Math.PI*2);
+  ctx.beginPath(); ctx.arc(ic.x, ic.y-r*1.4, r, 0, Math.PI*2);
   ctx.fillStyle=bg; ctx.fill();
   ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.lineWidth=1; ctx.stroke();
-  // Tail
-  ctx.beginPath(); ctx.moveTo(ic.x-5,ic.y-9); ctx.lineTo(ic.x+5,ic.y-9); ctx.lineTo(ic.x,ic.y); ctx.closePath();
-  ctx.fillStyle=bg; ctx.fill();
-  // Emoji
-  ctx.font='14px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(ICON_EMOJI[ic.itype]||'📍',ic.x,ic.y-18);
-  // Label popup (always in editor)
-  if(ic.label){
-    ctx.font='bold 10px "IBM Plex Sans",sans-serif';
+  ctx.beginPath(); ctx.moveTo(ic.x-r*0.4, ic.y-r*0.5); ctx.lineTo(ic.x+r*0.4, ic.y-r*0.5); ctx.lineTo(ic.x, ic.y);
+  ctx.closePath(); ctx.fillStyle=bg; ctx.fill();
+  ctx.font=`${Math.round(r*1.1)}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(ICON_EMOJI[ic.itype]||'📍', ic.x, ic.y-r*1.4);
+  if(ic.label && zoom>0.05){
+    const fs=Math.min(Math.round(10*zoom),11);
+    ctx.font=`bold ${fs}px "IBM Plex Sans",sans-serif`;
     ctx.textAlign='center'; ctx.textBaseline='top';
     const tw=ctx.measureText(ic.label).width;
-    ctx.fillStyle='rgba(255,255,255,0.95)';
-    roundRect(ctx,ic.x-tw/2-4,ic.y-ic.y+ic.y+2-35,tw+8,14,3);
-    ctx.fill(); ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=0.5; ctx.stroke();
-    ctx.fillStyle='#222'; ctx.fillText(ic.label,ic.x,ic.y-33);
+    ctx.fillStyle='rgba(255,255,255,0.92)';
+    roundRect(ctx, ic.x-tw/2-3, ic.y+2, tw+6, fs+4, 3); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=0.5; ctx.stroke();
+    ctx.fillStyle='#222'; ctx.fillText(ic.label, ic.x, ic.y+3);
   }
   ctx.restore();
+}
+
+function drawTrafficLight(ctx, x, y, zoom){
+  const sc=Math.max(0.6, zoom*0.7);
+  const bw=10*sc, bh=28*sc, br=3*sc;
+  const bx=x-bw/2, by=y-bh;
+  // Post
+  ctx.fillStyle='#444';
+  ctx.fillRect(x-1.5*sc, y-bh, 3*sc, bh+8*sc);
+  // Housing
+  ctx.beginPath();
+  ctx.roundRect?ctx.roundRect(bx,by,bw,bh,br):ctx.rect(bx,by,bw,bh);
+  ctx.fillStyle='#1a1a1a'; ctx.fill();
+  ctx.strokeStyle='#555'; ctx.lineWidth=0.8; ctx.stroke();
+  // Lights: red top, yellow mid, green bottom
+  const lights=[{col:'#ff3b30',cy:by+bh*0.2},{col:'#ffcc00',cy:by+bh*0.5},{col:'#34c759',cy:by+bh*0.8}];
+  lights.forEach(l=>{
+    ctx.beginPath(); ctx.arc(x, l.cy, 3*sc, 0, Math.PI*2);
+    ctx.fillStyle=l.col; ctx.fill();
+    // glow effect on green (active)
+    if(l.col==='#34c759'){
+      ctx.shadowColor='#34c759'; ctx.shadowBlur=4*sc;
+      ctx.fill(); ctx.shadowBlur=0;
+    }
+  });
+}
+
+function drawStopSign(ctx, x, y, zoom){
+  const sc=Math.max(0.6, zoom*0.7);
+  const r=9*sc;
+  ctx.save();
+  ctx.translate(x, y-r*1.5);
+  // Octagon
+  ctx.beginPath();
+  for(let i=0;i<8;i++){
+    const a=(i*Math.PI/4)-Math.PI/8;
+    i===0?ctx.moveTo(r*Math.cos(a),r*Math.sin(a)):ctx.lineTo(r*Math.cos(a),r*Math.sin(a));
+  }
+  ctx.closePath();
+  ctx.fillStyle='#cc2222'; ctx.fill();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=1.5*sc; ctx.stroke();
+  ctx.font=`bold ${Math.round(5*sc)}px Arial`; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('STOP',0,0);
+  ctx.restore();
+  // Post
+  ctx.fillStyle='#888'; ctx.fillRect(x-1.2*sc, y-r*1.5, 2.5*sc, r*1.5+6*sc);
+}
+
+function drawCrossing(ctx, x, y, zoom){
+  const sc=Math.max(0.5, zoom*0.6);
+  const w=18*sc, h=10*sc;
+  // Zebra stripes
+  for(let i=0;i<4;i++){
+    ctx.fillStyle=i%2===0?'#fff':'#999';
+    ctx.fillRect(x-w/2+i*(w/4), y-h/2, w/4, h);
+  }
+  ctx.strokeStyle='#888'; ctx.lineWidth=0.5; ctx.strokeRect(x-w/2, y-h/2, w, h);
+  ctx.font=`${Math.round(10*sc)}px serif`; ctx.textAlign='center'; ctx.textBaseline='bottom';
+  ctx.fillText('🚸', x, y-h/2);
 }
 
 function drawPinDrop(x,y,color){
@@ -1010,8 +1096,13 @@ function drawPinDrop(x,y,color){
 
 // ── CANVAS EVENTS ─────────────────────────────────────────────────────────────
 function toCanvas(e){
+  // canvas is scaled via CSS (width = W*zoom). 
+  // getBoundingClientRect gives the CSS-scaled position.
+  // Divide by zoom to get actual canvas coordinate.
   const r=canvas.getBoundingClientRect();
-  return{x:Math.round((e.clientX-r.left)/zoom),y:Math.round((e.clientY-r.top)/zoom)};
+  const scaleX=W/r.width;   // = 1/zoom (CSS scaled)
+  const scaleY=H/r.height;
+  return{x:Math.round((e.clientX-r.left)*scaleX), y:Math.round((e.clientY-r.top)*scaleY)};
 }
 // zip helper update for new CELL size
 function xyToZip(x,y){
@@ -1042,6 +1133,15 @@ canvas.addEventListener('click',e=>{
   if(pinMode){handlePinDrop(x,y);return;}
   if(stationPinMode){handleStationDrop(x,y);return;}
   if(busPinMode){handleBusDrop(x,y);return;}
+  if(eraserMode){
+    const found=findElementAtPoint(x,y);
+    if(found){
+      if(confirm(`Delete "${found.name||found.type}"?`)) delEl(found.id);
+    } else {
+      toast('No element found here','err');
+    }
+    return;
+  }
   if(!isDrawing) return;
   drawPts.push({x,y}); render();
 });
@@ -1136,6 +1236,59 @@ function cancelDraw(){
   document.getElementById('btnUndo').disabled=true;
   document.getElementById('drawHint').classList.remove('on');
   setStatus('Ready'); render();
+}
+
+function toggleEraser(){
+  eraserMode=!eraserMode;
+  const btn=document.getElementById('btnEraser');
+  if(eraserMode){
+    btn.textContent='🗑 Click element to delete';
+    btn.style.background='var(--danger)';
+    btn.style.color='#fff';
+    canvas.style.cursor='cell';
+    setStatus('Eraser — click an element to delete it');
+    // Cancel drawing if active
+    if(isDrawing) cancelDraw();
+  } else {
+    btn.textContent='🗑 Eraser Mode';
+    btn.style.background='';
+    btn.style.color='';
+    canvas.style.cursor='crosshair';
+    setStatus('Ready');
+  }
+}
+
+function findElementAtPoint(x,y){
+  // Find the topmost element whose path passes near the click point
+  const THRESHOLD=20;
+  for(let i=elements.length-1;i>=0;i--){
+    const el=elements[i];
+    const pts=JSON.parse(el.points||'[]');
+    if(pts.length===0) continue;
+    const isArea=['water','ocean','park','building','area'].includes(el.type);
+    if(isArea && pts.length>=3){
+      // Point-in-polygon test
+      let inside=false;
+      for(let j=0,k=pts.length-1;j<pts.length;k=j++){
+        const xi=pts[j].x,yi=pts[j].y,xk=pts[k].x,yk=pts[k].y;
+        if(((yi>y)!=(yk>y))&&(x<(xk-xi)*(y-yi)/(yk-yi)+xi)) inside=!inside;
+      }
+      if(inside) return el;
+    } else {
+      // Check distance to each segment
+      for(let j=0;j<pts.length-1;j++){
+        const ax=pts[j].x,ay=pts[j].y,bx=pts[j+1].x,by=pts[j+1].y;
+        const dx=bx-ax,dy=by-ay;
+        const len2=dx*dx+dy*dy;
+        if(len2===0) continue;
+        const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/len2));
+        const px2=ax+t*dx,py2=ay+t*dy;
+        const dist=Math.sqrt((x-px2)**2+(y-py2)**2);
+        if(dist<THRESHOLD) return el;
+      }
+    }
+  }
+  return null;
 }
 
 // ── DATA LOADERS ──────────────────────────────────────────────────────────────
