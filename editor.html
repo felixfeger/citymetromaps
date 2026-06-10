@@ -465,7 +465,7 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
 <script>
 const API = (location.hostname==='localhost'||location.hostname==='127.0.0.1')
   ? 'http://localhost:8787'
-  : 'https://maps-api.felixfeger46.workers.dev';
+  : ' https://maps-api.felixfeger46.workers.dev';
 
 const CELL=800, COLS=10, ROWS=10, W=8000, H=8000;
 const canvas=document.getElementById('mapCanvas');
@@ -1313,13 +1313,26 @@ async function delEl(id){if(!confirm('Delete?'))return;await apiFetch(`/api/elem
 async function loadAddresses(){
   try{addresses=await apiFetch('/api/addresses');document.getElementById('addrCount').textContent=`(${addresses.length})`;
   const list=document.getElementById('addrList');
-  if(!addresses.length){list.innerHTML='<div class="empty"><div class="ico">📬</div>No addresses</div>';render();return;}
-  list.innerHTML=addresses.map(a=>`<div class="ait">
-    <div class="anum">${a.number}</div>
-    <div class="ast">${a.street}${a.unit?', '+a.unit:''}<br><span style="font-size:10px;color:var(--muted)">${a.address_type}</span></div>
-    <div class="zbadge">${a.zip}</div>
-    <button class="xbtn" onclick="delAddr(${a.id})">✕</button>
-  </div>`).join('');
+  if(!addresses.length){list.innerHTML='<div class="empty"><div class="ico">📬</div>No addresses yet — draw a named road to auto-generate</div>';render();return;}
+  // Separate blocks from specific addresses
+  const blocks=addresses.filter(a=>a.address_type==='block');
+  const specific=addresses.filter(a=>a.address_type!=='block');
+  const blockCount=blocks.length;
+  list.innerHTML=`
+    ${blockCount?`<div style="font-size:10px;color:var(--muted);padding:4px 2px 6px">🏘 ${blockCount} auto-generated block ranges</div>`:''}
+    ${specific.map(a=>`<div class="ait">
+      <div class="anum">${a.number}</div>
+      <div class="ast">${a.street}${a.unit?', '+a.unit:''}<br><span style="font-size:10px;color:var(--muted)">${a.address_type}${a.district?' · '+a.district:''}</span></div>
+      <div class="zbadge">${a.zip}</div>
+      <button class="xbtn" onclick="delAddr(${a.id})">✕</button>
+    </div>`).join('')}
+    ${blocks.slice(0,5).map(b=>`<div class="ait" style="opacity:.6">
+      <div class="anum" style="font-size:9px">${b.number}</div>
+      <div class="ast" style="font-size:11px">${b.label||b.street}</div>
+      <div class="zbadge">${b.zip}</div>
+    </div>`).join('')}
+    ${blocks.length>5?`<div style="font-size:10px;color:var(--muted);padding:4px">… and ${blocks.length-5} more blocks</div>`:''}
+  `;
   }catch{}
   render();
 }
@@ -1380,10 +1393,22 @@ function startPin(){
   pinMode=true; canvas.style.cursor='cell';
   document.getElementById('btnPin').textContent='📍 Click the map…'; setStatus('Click to place address pin');
 }
-function handlePinDrop(x,y){
-  const zip=xyToZip(x,y); pendingPin={x,y,zip};
-  document.getElementById('aZip').value=zip;
-  document.getElementById('pinZL').textContent=`📍 In zip ${zip}`;
+async function handlePinDrop(x,y){
+  // Snap to nearest road and auto-fill address
+  try{
+    const snap=await apiFetch('/api/snap-to-road','POST',{x,y});
+    pendingPin={x:snap.x, y:snap.y, zip:snap.zip, snapped:true};
+    document.getElementById('aNum').value=snap.number||'';
+    document.getElementById('aStreet').value=snap.street||'';
+    document.getElementById('aZip').value=snap.zip||'';
+    document.getElementById('pinZL').textContent=`📍 Snapped to ${snap.full_address} (zip ${snap.zip})`;
+  }catch(e){
+    // Fallback: no road nearby
+    const zip=xyToZip(x,y);
+    pendingPin={x,y,zip,snapped:false};
+    document.getElementById('aZip').value=zip;
+    document.getElementById('pinZL').textContent=`📍 In zip ${zip} — no road nearby`;
+  }
   document.getElementById('pinForm').style.display='block';
   pinMode=false; canvas.style.cursor='crosshair';
   document.getElementById('btnPin').textContent='📍 Click Map to Place';
@@ -1398,10 +1423,25 @@ function cancelPin(){
 }
 async function saveAddr(){
   if(!pendingPin) return;
-  const number=document.getElementById('aNum').value.trim(), street=document.getElementById('aStreet').value.trim();
-  if(!number||!street){toast('Number & Street required','err');return;}
-  const payload={number,street,unit:document.getElementById('aUnit').value.trim()||null,district:document.getElementById('aDist').value.trim()||null,zip:pendingPin.zip,x:pendingPin.x,y:pendingPin.y,address_type:document.getElementById('aType').value,label:document.getElementById('aLabel').value.trim()||null};
-  try{const r=await apiFetch('/api/addresses','POST',payload);if(r.id){toast(`Saved: ${number} ${street}`);await loadAddresses();}}catch{toast('Save failed','err');}
+  const number=document.getElementById('aNum').value.trim();
+  const street=document.getElementById('aStreet').value.trim();
+  // If no number/street filled, let server auto-snap
+  const payload={
+    number:number||undefined, street:street||undefined,
+    unit:document.getElementById('aUnit').value.trim()||null,
+    district:document.getElementById('aDist').value.trim()||null,
+    zip:pendingPin.zip,
+    x:pendingPin.x, y:pendingPin.y,
+    address_type:document.getElementById('aType').value,
+    label:document.getElementById('aLabel').value.trim()||null
+  };
+  try{
+    const r=await apiFetch('/api/addresses','POST',payload);
+    if(r.id){
+      toast(`Saved: ${r.number||number} ${r.street||street} (${r.zip})`);
+      await loadAddresses();
+    }
+  }catch{toast('Save failed','err');}
   cancelPin();
 }
 
