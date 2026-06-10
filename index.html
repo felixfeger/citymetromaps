@@ -529,7 +529,17 @@ function render(){
   }
 
   // markers
-  if(fromLoc){const{x,y}=toScreen(fromLoc.x,fromLoc.y);const r=9*zoomLevel;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#007aff';ctx.lineWidth=3*zoomLevel;ctx.stroke();ctx.beginPath();ctx.arc(x,y,r*.4,0,Math.PI*2);ctx.fillStyle='#007aff';ctx.fill();}
+  if(fromLoc){
+    const{x,y}=toScreen(fromLoc.x,fromLoc.y);const r=9*zoomLevel;
+    if(fromLoc.interpolated){
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+      ctx.setLineDash([4*zoomLevel,3*zoomLevel]);ctx.strokeStyle='#007aff';ctx.lineWidth=2.5*zoomLevel;ctx.stroke();ctx.setLineDash([]);
+      ctx.beginPath();ctx.arc(x,y,r*.4,0,Math.PI*2);ctx.fillStyle='#007aff';ctx.fill();
+    } else {
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#007aff';ctx.lineWidth=3*zoomLevel;ctx.stroke();
+      ctx.beginPath();ctx.arc(x,y,r*.4,0,Math.PI*2);ctx.fillStyle='#007aff';ctx.fill();
+    }
+  }
   if(toLoc){const{x,y}=toScreen(toLoc.x,toLoc.y);drawDestPin(x,y);}
 
   ctx.restore();ctx.textAlign='left';
@@ -861,7 +871,19 @@ function handlePick(e){
   picking=null;canvas.style.cursor='';document.getElementById('pickBanner').classList.remove('show');
   document.querySelectorAll('.map-pin-btn').forEach(b=>b.classList.remove('active'));
 }
-function setLoc(t,l){if(t==='from')fromLoc=l;else toLoc=l;document.getElementById('goBtn').disabled=!(fromLoc&&toLoc);render();}
+function setLoc(t,l){
+  if(t==='from') fromLoc=l;
+  else toLoc=l;
+  document.getElementById('goBtn').disabled=!(fromLoc&&toLoc);
+  // Show interpolated notice
+  if(l&&l.interpolated){
+    const field=t==='from'?'fromInput':'toInput';
+    const input=document.getElementById(field);
+    input.style.color='var(--accent)';
+    setTimeout(()=>input.style.color='',2000);
+  }
+  render();
+}
 
 // ── SHEET ─────────────────────────────────────────────────────────────────────
 function setSheet(s){
@@ -896,9 +918,21 @@ function setMode(m){
 
 // ── SUGGEST ───────────────────────────────────────────────────────────────────
 let sugD=null;
-function onTopSearch(q){clearTimeout(sugD);const b=document.getElementById('topSuggest');if(q.length<2){b.style.display='none';return;}sugD=setTimeout(async()=>{const a=await af(`/api/addresses?q=${encodeURIComponent(q)}`);if(!a.length){b.style.display='none';return;}b.style.display='block';b.innerHTML=a.map(x=>`<div class="sug-row" onclick="pickTop(${JSON.stringify(x).replace(/"/g,'&quot;')})"><div class="sug-icon">📍</div><div><div class="sug-name">${x.label||x.number+' '+x.street}</div><div class="sug-sub">${x.address_type} · ${x.zip}</div></div></div>`).join('');},220);}
+function onTopSearch(q){clearTimeout(sugD);const b=document.getElementById('topSuggest');if(q.length<2){b.style.display='none';return;}sugD=setTimeout(async()=>{const a=await af(`/api/addresses?q=${encodeURIComponent(q)}`);if(!a.length){b.style.display='none';return;}b.style.display='block';b.innerHTML=a.map(x=>{
+  const isInterp=x.address_type==='interpolated'||x.interpolated;
+  const isBlock=x.address_type==='block';
+  const ico=isInterp?'📌':isBlock?'🏘':'📍';
+  const lbl=x.label||`${x.number} ${x.street}`;
+  const sub=isInterp?`Approx. on ${x.street} · zip ${x.zip}`:isBlock?`${x.label}`:(`${x.address_type}·zip ${x.zip}`);
+  return`<div class="sug-row" onclick="pickTop(${JSON.stringify(x).replace(/"/g,'&quot;')})"><div class="sug-icon">${ico}</div><div><div class="sug-name">${lbl}</div><div class="sug-sub">${sub}</div></div></div>`;
+}).join('');},220);}
 function pickTop(a){document.getElementById('topSearch').value=a.label||`${a.number} ${a.street}`;document.getElementById('topSuggest').style.display='none';toLoc={x:a.x,y:a.y,label:a.label||`${a.number} ${a.street}`};panX=cw/2-a.x*zoomLevel;panY=ch/2-a.y*zoomLevel;render();}
-function onFieldSearch(e,t){clearTimeout(sugD);const q=e.target.value.trim();const b=document.getElementById('fieldSuggest');if(q.length<2){b.style.display='none';return;}sugD=setTimeout(async()=>{const a=await af(`/api/addresses?q=${encodeURIComponent(q)}`);if(!a.length){b.style.display='none';return;}b.style.display='block';b.innerHTML=a.map(x=>`<div class="sug-row" onclick="pickField(${JSON.stringify(x).replace(/"/g,'&quot;')},'${t}')"><div class="sug-icon">📍</div><div><div class="sug-name">${x.label||x.number+' '+x.street}</div><div class="sug-sub">${x.zip}</div></div></div>`).join('');},220);}
+function onFieldSearch(e,t){clearTimeout(sugD);const q=e.target.value.trim();const b=document.getElementById('fieldSuggest');if(q.length<2){b.style.display='none';return;}sugD=setTimeout(async()=>{const a=await af(`/api/addresses?q=${encodeURIComponent(q)}`);if(!a.length){b.style.display='none';return;}b.style.display='block';b.innerHTML=a.map(x=>{
+  const isInterp=x.address_type==='interpolated'||x.interpolated;
+  const ico=isInterp?'📌':x.address_type==='block'?'🏘':'📍';
+  const lbl=x.label||`${x.number} ${x.street}`;
+  return`<div class="sug-row" onclick="pickField(${JSON.stringify(x).replace(/"/g,'&quot;')},'${t}')"><div class="sug-icon">${ico}</div><div><div class="sug-name">${lbl}</div><div class="sug-sub">${isInterp?'Estimated location · ':''}zip ${x.zip}</div></div></div>`;
+}).join('');},220);}
 function pickField(a,t){const l=a.label||`${a.number} ${a.street}`;document.getElementById(t==='from'?'fromInput':'toInput').value=l;setLoc(t,{x:a.x,y:a.y,label:l});document.getElementById('fieldSuggest').style.display='none';}
 document.addEventListener('click',e=>{if(!e.target.closest('#topWrap'))document.getElementById('topSuggest').style.display='none';if(!e.target.closest('.dir-fields'))document.getElementById('fieldSuggest').style.display='none';});
 
