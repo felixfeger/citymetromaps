@@ -1,4 +1,3 @@
-HTMLEOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -378,7 +377,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <script>
 const API=(location.hostname==='localhost'||location.hostname==='127.0.0.1')
   ? 'http://localhost:8787'
-  : 'https://maps-api.felixfeger46.workers.dev';
+  : 'https://YOUR_WORKER.workers.dev';
 
 const CELL=800,COLS=10,ROWS=10,WORLD=8000;
 const canvas=document.getElementById('mapCanvas');
@@ -873,15 +872,23 @@ function setSheet(s){
   sh.className=s==='idle'?'peek':s==='search'?'half':'half';
 }
 function openDir(m){if(m)setMode(m);setSheet('search');}
-document.getElementById('sheetDrag').addEventListener('pointerdown',e=>{
-  const sy=e.clientY,sc=document.getElementById('sheet').className;
-  document.getElementById('sheetDrag').setPointerCapture(e.pointerId);
-  document.getElementById('sheetDrag').addEventListener('pointermove',function mv(e2){
-    const dy=e2.clientY-sy,sh=document.getElementById('sheet');
-    if(dy<-60)sh.className='full';else if(dy>60)sh.className=sc==='full'?'half':'peek';
-  },{once:false});
-  document.getElementById('sheetDrag').addEventListener('pointerup',()=>document.getElementById('sheetDrag').removeEventListener('pointermove',()=>{}),{once:true});
-});
+(function(){
+  const drag=document.getElementById('sheetDrag');
+  let sy=0,sc='';
+  function onMove(e){
+    const dy=e.clientY-sy;
+    const sh=document.getElementById('sheet');
+    if(dy<-60)sh.className='full';
+    else if(dy>60)sh.className=(sc==='full'?'half':'peek');
+  }
+  drag.addEventListener('pointerdown',e=>{
+    sy=e.clientY; sc=document.getElementById('sheet').className;
+    drag.setPointerCapture(e.pointerId);
+    drag.addEventListener('pointermove',onMove);
+  });
+  drag.addEventListener('pointerup',()=>drag.removeEventListener('pointermove',onMove));
+  drag.addEventListener('pointercancel',()=>drag.removeEventListener('pointermove',onMove));
+})();
 
 function setMode(m){
   mode=m;document.querySelectorAll('.mode-pill').forEach(p=>p.classList.toggle('active',p.dataset.m===m));render();
@@ -1147,13 +1154,69 @@ async function af(path,method='GET',body){
   const r=await fetch(API+path,opts);return r.json();
 }
 
+// ── URL PLACE PIN ─────────────────────────────────────────────────────────────
+async function showPlacePin(name){
+  // Search addresses for matching name
+  const decoded=decodeURIComponent(name).replace(/\+/g,' ');
+  try{
+    const addrs=await af('/api/addresses?q='+encodeURIComponent(decoded));
+    const icons2=await af('/api/icons');
+    // Also search icons (landmarks)
+    const match=addrs[0]||icons2.find(ic=>ic.label&&ic.label.toLowerCase().includes(decoded.toLowerCase()));
+    if(match){
+      const x=match.x, y=match.y;
+      const label=match.label||`${match.number||''} ${match.street||match.label||decoded}`.trim();
+      // Pan to location
+      panX=cw/2-x*zoomLevel; panY=ch/2-y*zoomLevel;
+      toLoc={x,y,label};
+      render();
+      // Show info card at bottom
+      showPlaceCard(label, match.address_type||match.itype||'', match.zip||'');
+    } else {
+      console.log('Place not found:', decoded);
+    }
+  }catch(err){console.error('Place lookup failed',err);}
+}
+
+function showPlaceCard(name, type, zip){
+  // Remove any existing card
+  document.getElementById('placeCard')?.remove();
+  const card=document.createElement('div');
+  card.id='placeCard';
+  Object.assign(card.style,{
+    position:'fixed',bottom:'0',left:'0',right:'0',zIndex:'200',
+    background:'var(--sheet-bg)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
+    borderRadius:'22px 22px 0 0',padding:'20px 20px 36px',
+    boxShadow:'0 -2px 20px rgba(0,0,0,.15)',
+    display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px'
+  });
+  card.innerHTML=`
+    <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">
+      <div style="width:40px;height:40px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📍</div>
+      <div style="min-width:0">
+        <div style="font-size:17px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
+        <div style="font-size:13px;color:var(--text3);margin-top:2px">${type}${zip?' · zip '+zip:''}</div>
+      </div>
+    </div>
+    <button onclick="document.getElementById('placeCard').remove();toLoc=null;render();" style="width:36px;height:36px;background:var(--surface3);border:none;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>
+  `;
+  document.body.appendChild(card);
+}
+
 // Refresh reports every 5 min + check nearby every 30s
 setInterval(async()=>{try{reports=await af('/api/reports');}catch{}render();},5*60*1000);
 setInterval(checkNearbyReports,30*1000);
 
 setSheet('idle');
 resize();
-loadAll();
+loadAll().then(()=>{
+  // URL place embed: maps.citymetro.xyz/unionstation
+  // or ?place=union+station
+  const pathSlug=location.pathname.replace(/^\/+/,'').replace(/-/g,' ').replace(/_/g,' ');
+  const paramPlace=new URLSearchParams(location.search).get('place');
+  const placeName=paramPlace||(pathSlug&&pathSlug!=='index.html'&&pathSlug!==''?pathSlug:null);
+  if(placeName) showPlacePin(placeName);
+});
 </script>
 </body>
 </html>
