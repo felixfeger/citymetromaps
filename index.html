@@ -97,7 +97,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .z-btn{width:40px;height:40px;background:rgba(255,255,255,.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:none;border-radius:12px;cursor:pointer;font-size:20px;font-weight:300;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.10);color:var(--text);}
 
 /* ── REPORT BUTTON ── */
-#reportBtn{position:fixed;right:14px;bottom:180px;z-index:100;}
+#reportBtn{position:fixed;right:14px;bottom:180px;z-index:100;display:none;}
 .rep-btn{width:44px;height:44px;background:rgba(255,255,255,.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:none;border-radius:50%;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.12);}
 
 /* ── SCALE BAR ── */
@@ -748,15 +748,50 @@ function drawShield(x,y,style,num){
 
 function drawStation(s){
   if(CELL*zoomLevel<6)return;
-  const{x,y}=toScreen(s.x,s.y);const col=s.op_color||'#1a3a8a';
-  const r=Math.max(4,9*zoomLevel);
-  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=Math.max(1.5,2*zoomLevel);ctx.stroke();
-  if(r>4){ctx.font=`bold ${Math.round(r*.9)}px Arial`;ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('M',x,y);}
-  if(s.name&&CELL*zoomLevel>25){
-    const fs=Math.min(Math.round(10*zoomLevel),12);ctx.font=`${fs}px -apple-system,sans-serif`;
+  const{x,y}=toScreen(s.x,s.y);
+  const platforms=s.platforms||[];
+  // Determine primary color from platforms or default
+  const typeColors={subway:'#e53e3e',light_rail:'#38a169',regional_rail:'#3182ce',bus:'#f97316',tram:'#805ad5',monorail:'#d69e2e'};
+  const primaryPlatform=platforms[0];
+  const col=(primaryPlatform&&typeColors[primaryPlatform.type])||'#1a3a8a';
+  const r=Math.max(4,10*zoomLevel);
+  // Hub circle
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle='#fff';ctx.fill();
+  ctx.strokeStyle=col;ctx.lineWidth=Math.max(2,3*zoomLevel);ctx.stroke();
+  // Multi-type indicator: colored segments if multiple platform types
+  if(platforms.length>1){
+    const types=[...new Set(platforms.map(p=>p.type))];
+    const step=(Math.PI*2)/types.length;
+    types.forEach((t,i)=>{
+      ctx.beginPath();ctx.moveTo(x,y);ctx.arc(x,y,r*.7,i*step,(i+1)*step);ctx.closePath();
+      ctx.fillStyle=typeColors[t]||'#888';ctx.fill();
+    });
+  } else {
+    ctx.beginPath();ctx.arc(x,y,r*.7,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+  }
+  // "M" or service icons
+  ctx.font=`bold ${Math.round(r*.8)}px Arial`;ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(s.short_name||(s.name?s.name[0]:'S'),x,y);
+  // Name label
+  if(s.name&&CELL*zoomLevel>20){
+    const fs=Math.min(Math.round(10*zoomLevel),12);ctx.font=`bold ${fs}px -apple-system,sans-serif`;
     const tw=ctx.measureText(s.name).width;const lx=x,ly=y+r+3;
-    ctx.fillStyle=isDark()?'rgba(28,28,28,.92)':'rgba(255,255,255,.92)';roundRect(ctx,lx-tw/2-4,ly,tw+8,fs+6,4);ctx.fill();
-    ctx.strokeStyle=col;ctx.lineWidth=1;ctx.stroke();ctx.fillStyle=isDark()?'#fff':'#1a1a2e';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(s.name,lx,ly+2);
+    ctx.fillStyle=isDark()?'rgba(28,28,28,.94)':'rgba(255,255,255,.94)';
+    roundRect(ctx,lx-tw/2-5,ly,tw+10,fs+7,4);ctx.fill();
+    ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();
+    ctx.fillStyle=isDark()?'#fff':'#1a1a2e';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(s.name,lx,ly+2);
+    // Platform type badges when zoomed in
+    if(CELL*zoomLevel>80&&platforms.length){
+      const types=[...new Set(platforms.map(p=>p.type))];
+      const typeEmoji={subway:'🚇',light_rail:'🚊',regional_rail:'🚆',bus:'🚌',tram:'🚋',monorail:'🚝'};
+      const badgeY=ly+fs+10;
+      let bx=lx-(types.length-1)*14;
+      types.forEach(t=>{
+        ctx.font=`${Math.round(10*zoomLevel)}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(typeEmoji[t]||'🚉',bx,badgeY);bx+=28;
+      });
+    }
   }
 }
 
@@ -851,7 +886,20 @@ function roundRect(ctx,x,y,w,h,r){
 
 // ── PAN / ZOOM ─────────────────────────────────────────────────────────────────
 let dragging=false,lx=0,ly=0;
-canvas.addEventListener('pointerdown',e=>{if(picking||reportPickMode){handlePick(e);return;}dragging=true;lx=e.clientX;ly=e.clientY;canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointerdown',e=>{
+  if(picking||reportPickMode){handlePick(e);return;}
+  // Check if tapping a station hub
+  const{x,y}=toWorld(e.clientX,e.clientY);
+  const tappedHub=stations.find(s=>{
+    const d=Math.sqrt((s.x-x)**2+(s.y-y)**2);
+    return d<20/zoomLevel;
+  });
+  if(tappedHub&&!dragging){
+    showHubCard(tappedHub);
+    return;
+  }
+  dragging=true;lx=e.clientX;ly=e.clientY;canvas.setPointerCapture(e.pointerId);
+});
 canvas.addEventListener('pointermove',e=>{if(!dragging)return;panX+=e.clientX-lx;panY+=e.clientY-ly;lx=e.clientX;ly=e.clientY;render();});
 canvas.addEventListener('pointerup',()=>{dragging=false;});
 canvas.addEventListener('wheel',e=>{e.preventDefault();doZoom(e.deltaY<0?1.12:1/1.12,e.clientX,e.clientY);},{passive:false});
@@ -961,6 +1009,7 @@ function startDrivingMode(data){
   document.getElementById('topBar').style.display='none';
   document.getElementById('zoomCtrl').style.bottom='260px';
   document.getElementById('scaleBar').style.bottom='230px';
+  document.getElementById('reportBtn').style.display='block';
   document.getElementById('reportBtn').style.bottom='310px';
   updateDrivingUI(0,data.totalDuration);
   // Show speed limit for first step's road
@@ -1020,6 +1069,7 @@ function stopDrivingMode(){
   document.getElementById('topBar').style.display='flex';
   document.getElementById('zoomCtrl').style.bottom='240px';
   document.getElementById('scaleBar').style.bottom='200px';
+  document.getElementById('reportBtn').style.display='none';
   document.getElementById('reportBtn').style.bottom='180px';
 }
 
@@ -1056,10 +1106,14 @@ function renderResults(data){
         const bgCol=stepBgColors[st.type]||col;
         const badge=st.type==='wait'?'⏱':st.type==='transfer'?'🔄':st.type==='arrive'?'✓':(st.icon||(i+1));
         const nearSig=mode==='driving'&&st.x!=null?getNearSig(st.x,st.y):null;
+        const isExit=st.instruction&&st.instruction.toLowerCase().includes('exit');
         return`<div class="step-row" id="sr-${i}" onclick="jumpStep(${i})">
           <div class="step-ico-wrap" style="background:${bgCol}20;color:${bgCol}">${badge}</div>
           <div class="step-body">
-            <div class="step-lbl">${st.instruction}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="step-lbl">${st.instruction}</div>
+              ${isExit?`<div style="background:#1a6b3a;color:#fff;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">EXIT</div>`:''}
+            </div>
             ${nearSig?`<div class="step-sub" style="display:flex;align-items:center;gap:3px"><span>${nearSig.itype==='stopsign'?'🛑':'🚦'}</span> ${nearSig.itype==='stopsign'?'Stop sign':'Traffic light'} ahead</div>`:''}
             ${st.detail&&!nearSig?`<div class="step-sub">${st.detail}</div>`:''}
             <div class="step-time">${st.distance?fmtDist(st.distance)+' · ':''}${st.duration?fmtDur(st.duration):''}</div>
@@ -1167,6 +1221,38 @@ async function notHereReport(){
   document.getElementById('reportPopup').classList.remove('show');
   render();activePopupReport=null;
 }
+function showHubCard(hub){
+  document.getElementById('placeCard')?.remove();
+  const card=document.createElement('div');
+  card.id='placeCard';
+  Object.assign(card.style,{position:'fixed',bottom:'0',left:'0',right:'0',zIndex:'200',background:'var(--sheet-bg)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',borderRadius:'22px 22px 0 0',padding:'18px 20px 36px',boxShadow:'0 -2px 20px rgba(0,0,0,.15)'});
+  const typeEmoji={subway:'🚇',light_rail:'🚊',regional_rail:'🚆',bus:'🚌',tram:'🚋',monorail:'🚝'};
+  const platforms=hub.platforms||[];
+  const platHtml=platforms.map(p=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:22px">${typeEmoji[p.type]||'🚉'}</span>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600;color:var(--text)">${p.platform_name}${p.platform_code?' ['+p.platform_code+']':''}</div>
+        <div style="font-size:12px;color:var(--text3)">${p.type.replace('_',' ')}${p.op_name?' · '+p.op_name:''}${p.notes?' · '+p.notes:''}</div>
+      </div>
+      <div style="background:${p.op_color||'#007aff'};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${p.logo_emoji||''} ${p.op_name||p.type}</div>
+    </div>`).join('');
+  card.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <div style="font-size:19px;font-weight:800;color:var(--text)">${hub.name}</div>
+        ${hub.description?`<div style="font-size:13px;color:var(--text3);margin-top:2px">${hub.description}</div>`:''}
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Zip ${hub.zip}</div>
+      </div>
+      <button onclick="document.getElementById('placeCard').remove()" style="width:36px;height:36px;background:var(--surface3);border:none;border-radius:50%;font-size:16px;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">PLATFORMS & SERVICES</div>
+    ${platHtml||'<div style="font-size:13px;color:var(--text3);padding:10px 0">No platforms configured</div>'}
+    <button onclick="document.getElementById('dirPanel').classList.add('open');document.getElementById('topBar').style.display='none';document.getElementById('toInput').value='${hub.name.replace(/'/g,"")}';toLoc={x:${hub.x},y:${hub.y},label:'${hub.name.replace(/'/g,"")}'}; document.getElementById('goBtn').disabled=!(fromLoc&&toLoc);setSheet('search');document.getElementById('placeCard').remove();" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:14px">Directions to ${hub.name}</button>
+  `;
+  document.body.appendChild(card);
+}
+
 function toast(msg,t=''){
   const el=document.createElement('div');
   Object.assign(el.style,{position:'fixed',bottom:'80px',left:'50%',transform:'translateX(-50%)',background:t==='err'?'#ff3b30':'#1a1a1a',color:'#fff',padding:'10px 20px',borderRadius:'20px',fontSize:'14px',fontWeight:'600',zIndex:'9999',boxShadow:'0 4px 20px rgba(0,0,0,.3)',whiteSpace:'nowrap'});
@@ -1177,7 +1263,13 @@ function toast(msg,t=''){
 // ── DATA ──────────────────────────────────────────────────────────────────────
 async function loadAll(){
   try{elements=await af('/api/elements');}catch{}
-  try{stations=await af('/api/stations');}catch{}
+  try{
+    // Load hubs as stations for rendering
+    const hubs=await af('/api/hubs');
+    const platforms=await af('/api/platforms');
+    // Attach platforms to hubs
+    stations=hubs.map(h=>({...h,platforms:platforms.filter(p=>p.hub_id===h.id)}));
+  }catch{}
   try{icons=await af('/api/icons');}catch{}
   try{reports=await af('/api/reports');}catch{}
   render();
