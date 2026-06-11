@@ -190,8 +190,11 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
           <option value="interchange">Interchange / Connector</option>
           <option value="loopRamp">Loop Ramp</option>
         </select>
-        <label>Ramp Name / Label</label>
-        <input type="text" id="rampName" placeholder="e.g. Exit 12, I-5 N On-Ramp">
+        <label>Exit Number (off-ramp only)</label>
+        <input type="text" id="exitNum" placeholder="e.g. 12, 12A">
+        <label>Exit Name / Destination</label>
+        <input type="text" id="rampName" placeholder="e.g. Downtown / Main St">
+        <p style="font-size:10px;color:var(--muted);margin-top:4px">Exit number shows as a green sign in driving directions.</p>
       </div>
       <!-- Rail options -->
       <div class="sec" id="opt-rail" style="display:none">
@@ -394,22 +397,54 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
         <div id="swList"><div class="empty"><div class="ico">🕐</div>Select a line above</div></div>
       </div>
 
-      <!-- STATIONS -->
+      <!-- STATION HUBS (multi-platform) -->
       <div class="sec">
-        <div class="sl">Train / Metro Station</div>
-        <button class="btn btn-c btn-full" id="btnStation" onclick="startStationPin()">🚉 Click Map to Place</button>
+        <div class="sl">Station / Transit Hub</div>
+        <p style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.4">One hub (e.g. Union Station) can have multiple platforms for different services.</p>
+        <button class="btn btn-c btn-full" id="btnStation" onclick="startStationPin()">🚉 Click Map to Place Hub</button>
         <div id="stationForm" style="display:none;margin-top:10px">
-          <label>Station Name *</label><input type="text" id="stName" placeholder="Central Station">
-          <label>Station Code</label><input type="text" id="stCode" placeholder="CTR">
-          <label>Operator</label><select id="stOperator"><option value="">— none —</option></select>
-          <label>Lines (comma sep. line IDs)</label><input type="text" id="stLines" placeholder="1, 2">
+          <label>Hub Name *</label><input type="text" id="stName" placeholder="Union Station">
+          <label>Short Name</label><input type="text" id="stShort" placeholder="UNI">
+          <label>Description</label><input type="text" id="stDesc" placeholder="Downtown transit hub">
           <div class="btn-row">
-            <button class="btn btn-y" onclick="saveStation()" style="flex:1">Save</button>
+            <button class="btn btn-y" onclick="saveHub()" style="flex:1">Save Hub</button>
             <button class="btn btn-o" onclick="cancelStationPin()">Cancel</button>
           </div>
         </div>
-        <div class="sl" style="padding:8px 0 4px">Stations <span id="stationCount" style="color:var(--muted)"></span></div>
-        <div id="stationList"><div class="empty"><div class="ico">🚉</div>No stations</div></div>
+        <div class="sl" style="padding:8px 0 4px">Hubs <span id="stationCount" style="color:var(--muted)"></span></div>
+        <div id="stationList"><div class="empty"><div class="ico">🚉</div>No hubs yet</div></div>
+      </div>
+
+      <!-- PLATFORM EDITOR -->
+      <div class="sec">
+        <div class="sl">Add Platform to Hub</div>
+        <label>Hub</label>
+        <select id="platHub"><option value="">— select hub —</option></select>
+        <label>Platform Name *</label>
+        <input type="text" id="platName" placeholder="Platform A, Bus Bay 3, Track 1">
+        <div class="r2">
+          <div><label>Code</label><input type="text" id="platCode" placeholder="A"></div>
+          <div><label>Type</label>
+            <select id="platType">
+              <option value="subway">Subway / Metro</option>
+              <option value="light_rail">Light Rail</option>
+              <option value="regional_rail">Regional Rail</option>
+              <option value="bus">Bus</option>
+              <option value="tram">Tram</option>
+              <option value="monorail">Monorail</option>
+            </select>
+          </div>
+        </div>
+        <label>Operator</label>
+        <select id="platOperator"><option value="">— none —</option></select>
+        <label>Lines (comma sep. line IDs)</label>
+        <input type="text" id="platLines" placeholder="1, 2, 5">
+        <label>Notes / Gate info</label>
+        <input type="text" id="platNotes" placeholder="e.g. Gate B, Level 2">
+        <button class="btn btn-y btn-full" style="margin-top:8px" onclick="savePlatform()">Add Platform</button>
+
+        <div class="sl" style="padding:8px 0 4px">Platforms <span id="platCount" style="color:var(--muted)"></span></div>
+        <div id="platList"><div class="empty"><div class="ico">🚉</div>Select or create a hub first</div></div>
       </div>
 
       <!-- BUS STOPS -->
@@ -465,7 +500,7 @@ input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--
 <script>
 const API = (location.hostname==='localhost'||location.hostname==='127.0.0.1')
   ? 'http://localhost:8787'
-  : ' https://maps-api.felixfeger46.workers.dev';
+  : 'https://maps-api.felixfeger46.workers.dev';
 
 const CELL=800, COLS=10, ROWS=10, W=8000, H=8000;
 const canvas=document.getElementById('mapCanvas');
@@ -1216,7 +1251,12 @@ async function finishDraw(){
     has_sidewalk=document.getElementById('hasSidewalk').checked;
   }
   else if(drawMode==='highway'){hw_number=document.getElementById('hwNum').value.trim();name=document.getElementById('hwName').value.trim();shield_style=shieldStyle;speed_limit=parseInt(document.getElementById('speedLimit').value)||65;}
-  else if(drawMode==='ramp'){subtype=document.getElementById('rampSub').value;name=document.getElementById('rampName').value.trim();}
+  else if(drawMode==='ramp'){
+    subtype=document.getElementById('rampSub').value;
+    name=document.getElementById('rampName').value.trim();
+    const exitN=document.getElementById('exitNum').value.trim();
+    if(exitN) hw_number=exitN; // reuse hw_number field for exit number
+  }
   else if(drawMode==='rail'){subtype=document.getElementById('railSub').value;name=document.getElementById('railName').value.trim();color=document.getElementById('railColor').value;}
   else{name=document.getElementById('areaName').value.trim();}
 
@@ -1453,24 +1493,107 @@ function handleStationDrop(x,y){
   pendingStation={x,y,zip:xyToZip(x,y)};
   document.getElementById('stationForm').style.display='block';
   stationPinMode=false; canvas.style.cursor='crosshair';
-  document.getElementById('btnStation').textContent='🚉 Click Map to Place Station';
+  document.getElementById('btnStation').textContent='🚉 Click Map to Place Hub';
   render();
 }
 function cancelStationPin(){
   stationPinMode=false; pendingStation=null; canvas.style.cursor='crosshair';
   document.getElementById('stationForm').style.display='none';
-  document.getElementById('btnStation').textContent='🚉 Click Map to Place Station';
+  document.getElementById('btnStation').textContent='🚉 Click Map to Place Hub';
   render();
 }
-async function saveStation(){
+async function saveHub(){
   if(!pendingStation) return;
   const name=document.getElementById('stName').value.trim();
-  if(!name){toast('Name required','err');return;}
-  const payload={name,code:document.getElementById('stCode').value.trim()||null,lines:document.getElementById('stLines').value.trim()||null,x:pendingStation.x,y:pendingStation.y,zip:pendingStation.zip};
-  try{const r=await apiFetch('/api/stations','POST',payload);if(r.id){toast(`Station saved: ${name}`);await loadStations();}}catch{toast('Save failed','err');}
+  if(!name){toast('Hub name required','err');return;}
+  const payload={name,short_name:document.getElementById('stShort').value.trim()||null,description:document.getElementById('stDesc').value.trim()||null,x:pendingStation.x,y:pendingStation.y,zip:pendingStation.zip};
+  try{
+    const r=await apiFetch('/api/hubs','POST',payload);
+    if(r.id){
+      toast(`Hub saved: ${name}`);
+      await loadHubs();
+    }
+  }catch{toast('Save failed','err');}
   cancelStationPin();
-  document.getElementById('stName').value=''; document.getElementById('stCode').value=''; document.getElementById('stLines').value='';
+  ['stName','stShort','stDesc'].forEach(id=>document.getElementById(id).value='');
 }
+
+async function savePlatform(){
+  const hubId=document.getElementById('platHub').value;
+  const platName=document.getElementById('platName').value.trim();
+  const type=document.getElementById('platType').value;
+  if(!hubId||!platName){toast('Hub and platform name required','err');return;}
+  const linesRaw=document.getElementById('platLines').value.trim();
+  const lines=linesRaw?linesRaw.split(',').map(s=>parseInt(s.trim())).filter(Boolean):[];
+  const payload={
+    hub_id:parseInt(hubId),
+    platform_name:platName,
+    platform_code:document.getElementById('platCode').value.trim()||null,
+    type,
+    operator_id:parseInt(document.getElementById('platOperator').value)||null,
+    lines,
+    notes:document.getElementById('platNotes').value.trim()||null
+  };
+  try{
+    const r=await apiFetch('/api/platforms','POST',payload);
+    if(r.id){toast(`Platform added: ${platName}`);await loadPlatforms(hubId);}
+  }catch{toast('Save failed','err');}
+  ['platName','platCode','platLines','platNotes'].forEach(id=>document.getElementById(id).value='');
+}
+
+async function loadHubs(){
+  try{
+    const hubs=await apiFetch('/api/hubs');
+    document.getElementById('stationCount').textContent=`(${hubs.length})`;
+    // Populate hub select in platform section
+    const sel=document.getElementById('platHub');
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— select hub —</option>'+hubs.map(h=>`<option value="${h.id}">${h.name}</option>`).join('');
+    if(cur) sel.value=cur;
+    // Render hub list
+    const list=document.getElementById('stationList');
+    if(!hubs.length){list.innerHTML='<div class="empty"><div class="ico">🚉</div>No hubs yet</div>';render();return;}
+    list.innerHTML=hubs.map(h=>`
+      <div class="ait" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <div style="display:flex;align-items:center;gap:8px;width:100%">
+          <div class="anum">🚉</div>
+          <div class="ast" style="flex:1"><strong>${h.name}</strong>${h.short_name?' ('+h.short_name+')':''}<br><span style="font-size:10px;color:var(--muted)">zip ${h.zip}</span></div>
+          <button class="xbtn" onclick="delHub(${h.id})">✕</button>
+        </div>
+      </div>`).join('');
+    // Render on canvas
+    stations=hubs;
+  }catch{}
+  render();
+}
+
+async function loadPlatforms(hubId){
+  if(!hubId){document.getElementById('platList').innerHTML='<div class="empty"><div class="ico">🚌</div>Select a hub above</div>';document.getElementById('platCount').textContent='';return;}
+  try{
+    const platforms=await apiFetch(`/api/platforms?hub_id=${hubId}`);
+    document.getElementById('platCount').textContent=`(${platforms.length})`;
+    const list=document.getElementById('platList');
+    const typeIcons={subway:'🚇',light_rail:'🚊',regional_rail:'🚆',bus:'🚌',tram:'🚋',monorail:'🚝'};
+    if(!platforms.length){list.innerHTML='<div class="empty"><div class="ico">🏗️</div>No platforms — add one above</div>';return;}
+    list.innerHTML=platforms.map(p=>`
+      <div class="ait">
+        <div class="anum">${typeIcons[p.type]||'🚉'}</div>
+        <div class="ast">
+          ${p.platform_name}${p.platform_code?' ['+p.platform_code+']':''}
+          <br><span style="font-size:10px;color:var(--muted)">${p.type}${p.op_name?' · '+p.op_name:''}${p.notes?' · '+p.notes:''}</span>
+        </div>
+        <button class="xbtn" onclick="delPlatform(${p.id})">✕</button>
+      </div>`).join('');
+  }catch{document.getElementById('platList').innerHTML='<div class="empty">Error loading</div>';}
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const ps=document.getElementById('platHub');
+  if(ps) ps.addEventListener('change',e=>loadPlatforms(e.target.value));
+});
+
+async function delHub(id){if(!confirm('Delete hub and all its platforms?'))return;await apiFetch(`/api/hubs/${id}`,'DELETE');toast('Deleted');await loadHubs();}
+async function delPlatform(id){await apiFetch(`/api/platforms/${id}`,'DELETE');toast('Deleted');const hubId=document.getElementById('platHub').value;if(hubId)loadPlatforms(hubId);}
 
 function startBusPin(){
   busPinMode=true; canvas.style.cursor='cell';
@@ -1558,7 +1681,7 @@ async function loadOperators(){
     const ops=await apiFetch('/api/operators');
     document.getElementById('opCount').textContent=`(${ops.length})`;
     // populate selects
-    ['lnOperator','stOperator','brOperator'].forEach(id=>{
+    ['lnOperator','stOperator','brOperator','platOperator'].forEach(id=>{
       const sel=document.getElementById(id); if(!sel) return;
       const cur=sel.value;
       sel.innerHTML='<option value="">— none —</option>'+ops.map(o=>`<option value="${o.id}">${o.name} (${o.type})</option>`).join('');
@@ -1637,7 +1760,7 @@ setDM('road');
 renderLayerToggles();
 window.addEventListener('load',()=>setTimeout(fitToScreen,100));
 checkAPI();
-Promise.all([loadElements(),loadAddresses(),loadOperators(),loadLines(),loadStations(),loadBusStops(),loadIcons()]).then(()=>render());
+Promise.all([loadElements(),loadAddresses(),loadOperators(),loadLines(),loadHubs(),loadBusStops(),loadIcons()]).then(()=>render());
 render();
 </script>
 </body>
